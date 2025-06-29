@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aichmi | Make Your Reservation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #e0f2fe, #c7d2fe);
+      color: #1f2937;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #1e3a8a;
+      color: #fff;
+      padding: 1.5rem 2rem;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      font-size: 1.1rem;
+      font-weight: 400;
+      color: #cbd5e1;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+    }
+
+    .form-container {
+      background: #fff;
+      padding: 2.5rem 3rem;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      width: 100%;
+    }
+
+    .form-container h2 {
+      font-size: 2rem;
+      font-weight: 500;
+      margin-bottom: 1rem;
+      text-align: center;
+      color: #1e3a8a;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+    }
+
+    input, select {
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.2rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .buttons {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    button, .back-button {
+      flex: 1;
+      padding: 0.8rem 1rem;
+      font-size: 1rem;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    button {
+      background: #3b82f6;
+      color: #fff;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
+    .back-button {
+      background: #6b7280;
+      color: #fff;
+    }
+
+    .back-button:hover {
+      background: #4b5563;
+    }
+
+    footer {
+      background: #1e3a8a;
+      color: #9ca3af;
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Make Your Reservation</h1>
+    <p>Secure your table at Lofaki Venue, Kos</p>
+  </header>
+
+  <main>
+    <div class="form-container">
+      <h2>Reservation Form</h2>
+      <form action="/reservation" method="POST">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" name="name" placeholder="John Doe" required />
+
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" placeholder="you@example.com" required />
+
+        <label for="date">Reservation Date</label>
+        <input type="date" id="date" name="date" required />
+
+        <label for="time">Reservation Time</label>
+        <input type="time" id="time" name="time" required />
+
+        <label for="guests">Number of Guests</label>
+        <select id="guests" name="guests" required>
+          <option value="" disabled selected>Select guests</option>
+          <% for (let i = 1; i <= 8; i++) { %>
+            <option value="<%= i %>"><%= i %></option>
+          <% } %>
+        </select>
+
+        <label for="celebration">Celebration Type</label>
+        <select id="celebration" name="celebration">
+          <option value="none" selected>None</option>
+          <option value="birthday">Birthday</option>
+          <option value="anniversary">Anniversary</option>
+          <option value="honeymoon">Honeymoon</option>
+        </select>
+
+        <div class="buttons">
+          <button type="submit">Submit Reservation</button>
+          <a href="/" class="back-button">Back</a>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <footer>
+    &copy; 2025 Aichmi | Lofaki Venue, Kos
+  </footer>
+
+</body>
+</html>
