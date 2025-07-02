@@ -3,6 +3,7 @@ const path = require('path');
 require('dotenv').config();
 const RestaurantService = require('./services/RestaurantService');
 const app = express();
+const chatRouter = require('./routes/chat');
 
 // Middleware to parse JSON
 app.use(express.json());
@@ -17,6 +18,33 @@ app.use('/public', express.static(path.join(__dirname, '../public')));
 // Set the view engine to EJS (for legacy routes if needed)
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '../views'));
+
+// API Routes
+// API endpoint to get all restaurants
+app.get('/api/restaurants', async (req, res) => {
+    try {
+        const restaurants = await RestaurantService.getAllRestaurants();
+        res.json(restaurants);
+    } catch (error) {
+        console.error('Error fetching restaurants:', error);
+        res.status(500).json({ error: 'Failed to fetch restaurants' });
+    }
+});
+
+// API endpoint to get a specific restaurant
+app.get('/api/restaurants/:id', async (req, res) => {
+    try {
+        const restaurant = await RestaurantService.getRestaurantById(req.params.id);
+        if (restaurant) {
+            res.json(restaurant);
+        } else {
+            res.status(404).json({ error: 'Restaurant not found' });
+        }
+    } catch (error) {
+        console.error('Error fetching restaurant:', error);
+        res.status(500).json({ error: 'Failed to fetch restaurant' });
+    }
+});
 
 // API Routes
 // API endpoint to get all restaurants
@@ -64,6 +92,8 @@ app.get('*', (req, res) => {
     // For all other routes, serve the React app
     res.sendFile(path.join(__dirname, '../aichmi_frontend/dist/index.html'));
 });
+
+app.use('/api/chat', chatRouter);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 function Header() {
     return (
         <>
@@ -6,9 +8,9 @@ function Header() {
             <div className="nav-container">
               <a href="/" className="logo">AIchmi</a>
               <ul className="nav-links">
-                <li><a href="/">Home</a></li>
-                <li><a href="/reservation">Make Reservation</a></li>
-                <li><a href="#about">About</a></li>
+                <li><Link to="/">Home</Link></li>
+                <li><Link to="/browse-restaurants">Browse Restaurants</Link></li>
+                <li><Link to="/about">About</Link></li>
               </ul>
               <button className="mobile-menu-toggle" aria-label="Toggle menu">
                 <span></span>
