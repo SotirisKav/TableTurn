@@ -1,17 +1,21 @@
 const express = require('express');
 const router = express.Router();
 
-router.get("/", (req,res) => {
-    res.render('reservation');
-})
-
-router.get('/complete', (req, res) => {
-    res.render('reservation_complete');
-});
-
-router.post('/', (req, res) => {
-    const { name, email, date, time, guests, celebration } = req.body;
-    res.render('reservation_complete', { name, email, date, time, guests, celebration });
+router.post('/', async (req, res) => {
+    try {
+        const { restaurantId, customerName, date, time } = req.body;
+        // Save reservation to the database
+        const reservation = await ReservationService.createReservation({
+            restaurantId,
+            customerName,
+            date,
+            time,
+        });
+        res.status(201).json(reservation);
+    } catch (error) {
+        console.error('Error creating reservation:', error);
+        res.status(500).json({ error: 'Failed to create reservation' });
+    }
 });
 
 module.exports = router;

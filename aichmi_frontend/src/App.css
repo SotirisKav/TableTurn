@@ -238,8 +238,10 @@ body {
 
 .container {
   max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
   padding: 0 2rem;
+  text-align: center; /* Center-align text */
 }
 
 .about-section {
@@ -345,8 +347,14 @@ body {
 
 /* Browse Restaurants Page */
 .browse-restaurants {
-  padding: 120px 0 4rem; /* Account for fixed header */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 0; /* Account for fixed header */
   min-height: 100vh;
+  width: 100vw; /* Ensure it spans the full width */
+  margin-left: calc(50% - 50vw); /* Center horizontally */
   background: var(--white);
 }
 
@@ -445,6 +453,43 @@ body {
 .price-range {
   color: var(--text-gray);
   font-weight: 600;
+}
+
+.reservation-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 0; /* Account for fixed header */
+  min-height: 100vh;
+  background: var(--white);
+}
+
+.reservation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 1200px;
+  width: 100%;
+  margin: 2rem auto;
+}
+
+.reservation-form label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.reservation-form input {
+  padding: 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--text-gray);
+  border-radius: 8px;
+  width: 100%;
+}
+
+.reservation-form button {
+  margin-top: 1rem;
 }
 
 /* Responsive Design */

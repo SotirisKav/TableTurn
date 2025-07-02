@@ -5,6 +5,7 @@ import MainContent from './components/MainContent';
 //import AboutSection from './components/AboutSection';
 import Footer from './components/Footer';
 import BrowseRestaurants from './components/BrowseRestaurants';
+import Reservation from './components/Reservation'; 
 
 import './App.css';
 
@@ -20,6 +21,7 @@ function App() {
           </>
         } />
         <Route path="/browse-restaurants" element={<BrowseRestaurants />} />
+        <Route path="/reservation/:restaurantId" element={<Reservation />} />
       </Routes>
       <Footer />
     </Router>

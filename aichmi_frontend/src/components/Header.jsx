@@ -4,7 +4,7 @@ function Header() {
         <header className="header">
           <nav className="nav">
             <div className="nav-container">
-              <a href="/" className="logo">AICHMI</a>
+              <a href="/" className="logo">AIchmi</a>
               <ul className="nav-links">
                 <li><a href="/">Home</a></li>
                 <li><a href="/reservation">Make Reservation</a></li>

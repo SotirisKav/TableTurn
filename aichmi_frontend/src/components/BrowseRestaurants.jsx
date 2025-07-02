@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 function BrowseRestaurants() {
     const [restaurants, setRestaurants] = useState([]);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
+
+    const handleBook = (restaurantId) => {
+        navigate(`/reservation/${restaurantId}`);
+    };
 
     useEffect(() => {
         // Fetch restaurants from your backend
         const fetchRestaurants = async () => {
             try {
-                // Use relative URL since we're serving from the same domain
                 const response = await fetch('/api/restaurants');
                 const data = await response.json();
                 setRestaurants(data);
@@ -64,9 +69,12 @@ function BrowseRestaurants() {
                                     <span className="rating">★ {restaurant.rating}</span>
                                     <span className="price-range">{restaurant.priceRange}</span>
                                 </div>
-                                <a href={`/restaurant/${restaurant.id}`} className="cta-button primary">
+                                <button 
+                                    className="cta-button primary" 
+                                    onClick={() => handleBook(restaurant.id)}
+                                >
                                     View Details & Book
-                                </a>
+                                </button>
                             </div>
                         </div>
                     ))}
