@@ -27,7 +27,12 @@ CREATE TABLE venue (
     name VARCHAR(100) NOT NULL,
     address VARCHAR(255) NOT NULL,
     area VARCHAR(50) NOT NULL,
-    venue_type TEXT NOT NULL CHECK (venue_type IN ('restaurant', 'hotel'))
+    type TEXT NOT NULL CHECK (type IN ('restaurant', 'hotel')),
+    rating COMMENT 'Rating from 1 to 5' NUMERIC(2,1) CHECK (rating >= 1 AND rating <= 5),
+    pricing TEXT NOT NULL CHECK (pricing IN ('affordable', 'moderate', 'expensive')),
+    image_url VARCHAR(500),
+    description TEXT,
+    cuisine VARCHAR(100)
 );
 
 CREATE TABLE owner (

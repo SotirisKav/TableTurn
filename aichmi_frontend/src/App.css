@@ -22,6 +22,8 @@ body {
   line-height: 1.6;
   color: var(--text-dark);
   background: var(--white);
+  width: 100%;
+  overflow-x: hidden;
 }
 
 /* Header */
@@ -30,10 +32,10 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background: var(--white);
+  border-bottom: 3px solid var(--aegean-blue);
   z-index: 1000;
-  box-shadow: 0 1px 20px var(--shadow);
+  box-shadow: 0 2px 10px rgba(30, 58, 138, 0.1);
 }
 
 .nav-container {
@@ -62,7 +64,7 @@ body {
 .nav-links a {
   color: var(--text-dark);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 700;
   transition: var(--transition);
   position: relative;
 }
@@ -106,11 +108,11 @@ body {
 /* Hero Section */
 .hero {
   position: relative;
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100vw;
+  height: calc(100vh - 80px);
+  min-height: 600px;
+  margin-top: 80px;
+  margin-left: calc(50% - 50vw);
 }
 
 .hero-image {
@@ -144,10 +146,11 @@ body {
 
 .hero-content {
   text-align: center;
-  color: var(--white);
+  color: white;
   max-width: 600px;
   padding: 0 2rem;
   animation: fadeInUp 1s ease-out;
+  transition: color 0.8s ease-in-out;
 }
 
 .hero-title {
@@ -155,6 +158,8 @@ body {
   font-weight: 700;
   margin-bottom: 1rem;
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+  animation: fadeInUp 0.5s ease-out;
+  transition: color 0.8s ease-in-out, text-shadow 0.8s ease-in-out;
 }
 
 .hero-subtitle {
@@ -163,6 +168,24 @@ body {
   opacity: 0.95;
   font-weight: 400;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.2);
+  animation: fadeInUp 1s ease-out;
+  transition: color 0.8s ease-in-out, text-shadow 0.8s ease-in-out;
+}
+
+.hero-slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transition: opacity 1.5s ease-in-out;
+}
+
+.hero-slide.active {
+  opacity: 1;
 }
 
 /* CTA Buttons */
@@ -209,6 +232,8 @@ body {
 /* Main Content */
 .main {
   padding-top: 4rem;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
 }
 
 .container {
@@ -219,7 +244,7 @@ body {
 
 .about-section {
   padding: 6rem 0;
-  background: var(--cream);
+  background: var(--cream); 
 }
 
 .about-content {
@@ -318,6 +343,110 @@ body {
   }
 }
 
+/* Browse Restaurants Page */
+.browse-restaurants {
+  padding: 120px 0 4rem; /* Account for fixed header */
+  min-height: 100vh;
+  background: var(--white);
+}
+
+.page-title {
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  font-weight: 700;
+  color: var(--aegean-blue);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.page-subtitle {
+  font-size: 1.2rem;
+  color: var(--text-gray);
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.restaurants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.restaurant-card {
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px var(--shadow);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.restaurant-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(30, 58, 138, 0.2);
+}
+
+.restaurant-image {
+  width: 100%;
+  height: 250px;
+  overflow: hidden;
+}
+
+.restaurant-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: var(--transition);
+}
+
+.restaurant-card:hover .restaurant-image img {
+  transform: scale(1.05);
+}
+
+.restaurant-info {
+  padding: 1.5rem;
+}
+
+.restaurant-info h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--aegean-blue);
+  margin-bottom: 0.5rem;
+}
+
+.restaurant-cuisine {
+  font-size: 0.9rem;
+  color: var(--aegean-blue);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 1rem;
+}
+
+.restaurant-description {
+  color: var(--text-gray);
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.restaurant-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(30, 58, 138, 0.1);
+}
+
+.rating {
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.price-range {
+  color: var(--text-gray);
+  font-weight: 600;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .nav-container {
@@ -380,6 +509,15 @@ body {
     padding: 0.875rem 2rem;
     font-size: 1rem;
     min-width: 180px;
+  }
+
+  .restaurants-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .restaurant-card {
+    margin: 0 1rem;
   }
 }
 
