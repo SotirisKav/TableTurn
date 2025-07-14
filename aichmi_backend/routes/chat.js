@@ -1,32 +1,20 @@
-const express = require('express');
-const axios = require('axios');
+import express from 'express';
+import { askGemini } from '../services/AIservice.js';
+
 const router = express.Router();
 
 router.post('/', async (req, res) => {
   const { message, restaurantName, history } = req.body;
+  let prompt = message;
+  if (restaurantName) {
+    prompt = `For the restaurant "${restaurantName}": ${message}`;
+  }
   try {
-    const openaiRes = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: restaurantName ? `You are an AI assistant helping with reservations for ${restaurantName}.` : 'You are an AI assistant for a Greek restaurant reservation platform.' },
-          ...(history || []).map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text })),
-          { role: 'user', content: message }
-        ]
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-    const aiMessage = openaiRes.data.choices[0].message.content;
-    res.json({ text: aiMessage });
+    const aiText = await askGemini(prompt);
+    res.json({ text: aiText });
   } catch (err) {
-    res.status(500).json({ error: 'AI service error', details: err.message });
+    res.status(500).json({ text: "Sorry, there was an error contacting the AI." });
   }
 });
 
-module.exports = router; 
+export default router;

@@ -1,9 +1,12 @@
-const express = require('express');
-const path = require('path');
-require('dotenv').config();
-const RestaurantService = require('./services/RestaurantService');
+import express from 'express';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import chatRouter from './routes/chat.js';
+
+dotenv.config();
+
 const app = express();
-const chatRouter = require('./routes/chat');
 
 // Middleware to parse JSON
 app.use(express.json());
@@ -14,6 +17,9 @@ app.use(express.static(path.join(__dirname, '../aichmi_frontend/dist')));
 
 // Serve other static files from the public directory
 app.use('/public', express.static(path.join(__dirname, '../public')));
+
+// AI chatting capabilities
+app.use('/api/chat', chatRouter);
 
 // Set the view engine to EJS (for legacy routes if needed)
 app.set('view engine', 'ejs');
