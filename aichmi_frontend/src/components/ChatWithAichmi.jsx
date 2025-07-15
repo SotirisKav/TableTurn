@@ -45,7 +45,7 @@ function ChatWithAichmi() {
                 })
             });
             const data = await res.json();
-            setMessages(msgs => [...msgs, { sender: 'ai', text: data.text }]);
+            setMessages(msgs => [...msgs, { sender: 'ai', text: data.response }]);
         } catch (err) {
             setMessages(msgs => [...msgs, { sender: 'ai', text: 'Sorry, there was an error contacting the AI.' }]);
         } finally {
