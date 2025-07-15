@@ -1,48 +1,35 @@
 #!/bin/bash
-# Data Refresh Script for Aichmi Database
-# This script clears all data and reloads fresh sample data
 
-echo "🔄 Starting Aichmi database refresh..."
+# Exit on error
+set -e
 
-# Clear all data from tables (in correct order due to foreign key constraints)
-echo "🗑️  Clearing existing data..."
-psql -d aichmi -c "
-DELETE FROM response_templates;
-DELETE FROM bot_modules;
-DELETE FROM bot_config;
-DELETE FROM fully_booked_dates;
-DELETE FROM wedding_dates;
-DELETE FROM reservation;
-DELETE FROM owner;
-DELETE FROM venue;
-DELETE FROM customer;
-DELETE FROM hotel;
-DELETE FROM transfer_areas;
-DELETE FROM tables;
-"
+# Database connection variables (edit as needed)
+DB_NAME="aichmi"
+DB_USER="sotiriskavadakis"
+DB_HOST="localhost"
+DB_PORT="5432"
+SAMPLE_SQL="../../aichmi_db/sample_data.sql"
 
-if [ $? -eq 0 ]; then
-    echo "✅ Data cleared successfully"
-else
-    echo "❌ Error clearing data"
-    exit 1
+# Optional: Prompt for confirmation
+read -p "This will DELETE ALL DATA in your database '$DB_NAME'. Are you sure? (y/N): " confirm
+if [[ $confirm != "y" && $confirm != "Y" ]]; then
+  echo "Aborted."
+  exit 1
 fi
 
-# Reload fresh sample data
-echo "📥 Loading fresh sample data..."
-psql -d aichmi -f ../../aichmi_db/sample_data.sql
+# Get all table names in the public schema, except for schema_migrations (if using)
+TABLES=$(psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -p "$DB_PORT" -Atc "SELECT tablename FROM pg_tables WHERE schemaname='public';")
 
-if [ $? -eq 0 ]; then
-    echo "✅ Sample data loaded successfully"
-    echo "🎉 Database refresh complete!"
-    
-    # Show summary
-    echo ""
-    echo "📊 Data Summary:"
-    psql -d aichmi -c "SELECT COUNT(*) as restaurants FROM venue WHERE type = 'restaurant';"
-    psql -d aichmi -c "SELECT COUNT(*) as customers FROM customer;"
-    psql -d aichmi -c "SELECT COUNT(*) as reservations FROM reservation;"
-else
-    echo "❌ Error loading sample data"
-    exit 1
-fi
+# Disable foreign key checks, truncate all tables, then re-enable
+psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -p "$DB_PORT" -c "SET session_replication_role = 'replica';"
+for tbl in $TABLES; do
+  psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -p "$DB_PORT" -c "TRUNCATE TABLE \"$tbl\" RESTART IDENTITY CASCADE;"
+done
+psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -p "$DB_PORT" -c "SET session_replication_role = 'origin';"
+
+echo "All tables truncated. Now loading sample data..."
+
+# Run the sample data SQL
+psql -U "$DB_USER" -d "$DB_NAME" -h "$DB_HOST" -p "$DB_PORT" -f "$SAMPLE_SQL"
+
+echo "Database refresh complete!"
