@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 
 function ChatWithAichmi() {
     const { restaurantId } = useParams();
@@ -54,18 +55,23 @@ function ChatWithAichmi() {
 
     return (
         <div className="chat-page">
-            <div className="chat-container large">
+            <div className="chat-container improved">
                 <h1 className="chat-title">Chat with AICHMI</h1>
                 {restaurantId && (
                     <div className="chat-context">
                         You are chatting about reservation for <b>{restaurantName ? restaurantName : '...'}</b>.
                     </div>
                 )}
-                <div className="chat-history tall" ref={chatHistoryRef}>
+                <div className="chat-history improved" ref={chatHistoryRef}>
                     {messages.map((msg, idx) => (
-                        <div key={idx} className={`chat-message ${msg.sender}`}>{msg.text}</div>
+                        <div
+                            key={idx}
+                            className={`chat-message improved ${msg.sender}`}
+                        >
+                            <ReactMarkdown>{msg.text}</ReactMarkdown>
+                        </div>
                     ))}
-                    {loading && <div className="chat-message ai">AICHMI is typing...</div>}
+                    {loading && <div className="chat-message improved ai">AICHMI is typing...</div>}
                 </div>
                 <form className="chat-input-row" onSubmit={handleSend} autoComplete="off">
                     <input
@@ -84,4 +90,4 @@ function ChatWithAichmi() {
     );
 }
 
-export default ChatWithAichmi; 
+export default ChatWithAichmi;

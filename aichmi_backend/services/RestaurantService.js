@@ -1,4 +1,4 @@
-const pool = require('../config/database');
+import pool from '../config/database.js';
 
 class RestaurantService {
     // Get all restaurants with their details
@@ -73,6 +73,11 @@ class RestaurantService {
         }
     }
 
+    static async getRestaurantByName(name) {
+      const { rows } = await pool.query('SELECT * FROM venue WHERE name = $1', [name]);
+      return rows[0];
+    }
+
     // Check if a restaurant is fully booked on a specific date
     static async isFullyBooked(venueId, date) {
         try {
@@ -108,4 +113,4 @@ class RestaurantService {
     }
 }
 
-module.exports = RestaurantService;
+export default RestaurantService;
