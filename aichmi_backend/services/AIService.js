@@ -14,60 +14,124 @@ async function fetchRelevantData(prompt, restaurantId = null) {
   };
 
   try {
-    // Keywords to determine what data to fetch
     const keywords = prompt.toLowerCase();
-    
-    // Fetch restaurant data
-    if (keywords.includes('restaurant') || keywords.includes('menu') || keywords.includes('location') || keywords.includes('address')) {
-      if (restaurantId) {
-        const restaurant = await RestaurantService.getRestaurantById(restaurantId);
-        if (restaurant) relevantData.restaurants.push(restaurant);
-      } else {
-        relevantData.restaurants = await RestaurantService.getAllRestaurants();
+    // Only try to infer restaurantId if it is not provided
+    if (!restaurantId) {
+      const allRestaurants = await RestaurantService.getAllRestaurants();
+      const found = allRestaurants.find(r =>
+        keywords.includes(r.name.toLowerCase())
+      );
+      if (found) {
+        restaurantId = found.venue_id || found.id; // use your actual id field
+        relevantData.restaurants.push(found);
+
+        // Fetch owner for this restaurant
+        const ownerQuery = `
+          SELECT o.*, v.name as restaurant_name FROM owner o
+          JOIN venue v ON o.venue_id = v.venue_id
+          WHERE v.venue_id = $1
+        `;
+        const ownerResult = await pool.query(ownerQuery, [restaurantId]);
+        relevantData.owners = ownerResult.rows;
       }
     }
+    // --- RESTAURANT DATA ---
+    if (restaurantId) {
+      // Fetch specific restaurant
+      const restaurant = await RestaurantService.getRestaurantById(restaurantId);
+      // Only push if not already present, and always ensure it's the first in the array
+      if (restaurant) {
+        relevantData.restaurants = [restaurant];
+      }
+      // Fetch owner for this restaurant
+      const ownerQuery = `
+        SELECT o.*, v.name as restaurant_name FROM owner o
+        JOIN venue v ON o.venue_id = v.venue_id
+        WHERE v.venue_id = $1
+      `;
+      const ownerResult = await pool.query(ownerQuery, [restaurantId]);
+      relevantData.owners = ownerResult.rows;
 
-    // Fetch owner information
-    if (keywords.includes('owner') || keywords.includes('contact') || keywords.includes('phone') || keywords.includes('email')) {
-      const ownerQuery = restaurantId 
-        ? `SELECT o.*, v.name as restaurant_name FROM owner o 
-           JOIN venue v ON o.venue_id = v.venue_id 
-           WHERE v.venue_id = $1`
-        : `SELECT o.*, v.name as restaurant_name FROM owner o 
-           JOIN venue v ON o.venue_id = v.venue_id 
-           WHERE v.type = 'restaurant'`;
-      
-      const ownerResult = restaurantId 
-        ? await pool.query(ownerQuery, [restaurantId])
-        : await pool.query(ownerQuery);
-      
+      // Fetch menu items for this restaurant if user asks about menu
+      if (
+        (keywords.includes('menu') || keywords.includes('dish') || keywords.includes('food'))
+      ) {
+        relevantData.menuItems = await RestaurantService.getMenuItemsByVenueId(restaurantId);
+      }
+    } else if (
+      keywords.includes('restaurant') ||
+      keywords.includes('menu') ||
+      keywords.includes('location') ||
+      keywords.includes('address')
+    ) {
+      // Fetch all restaurants
+      relevantData.restaurants = await RestaurantService.getAllRestaurants();
+
+      // Fetch all owners for restaurants
+      const ownerQuery = `
+        SELECT o.*, v.name as restaurant_name FROM owner o
+        JOIN venue v ON o.venue_id = v.venue_id
+        WHERE v.type = 'restaurant'
+      `;
+      const ownerResult = await pool.query(ownerQuery);
       relevantData.owners = ownerResult.rows;
     }
 
-    // Fetch pricing and table information
-    if (keywords.includes('price') || keywords.includes('cost') || keywords.includes('table') || keywords.includes('fee')) {
+    // --- OWNER DATA (if user asks about owner/contact/phone/email, but no restaurantId) ---
+    if (
+      !restaurantId &&
+      (keywords.includes('owner') ||
+        keywords.includes('contact') ||
+        keywords.includes('phone') ||
+        keywords.includes('email'))
+    ) {
+      // Fetch all owners for restaurants
+      const ownerQuery = `
+        SELECT o.*, v.name as restaurant_name FROM owner o
+        JOIN venue v ON o.venue_id = v.venue_id
+        WHERE v.type = 'restaurant'
+      `;
+      const ownerResult = await pool.query(ownerQuery);
+      relevantData.owners = ownerResult.rows;
+    }
+
+    // --- TABLES ---
+    if (
+      keywords.includes('price') ||
+      keywords.includes('cost') ||
+      keywords.includes('table') ||
+      keywords.includes('fee')
+    ) {
       const tableQuery = `SELECT * FROM tables`;
       const tableResult = await pool.query(tableQuery);
       relevantData.generalInfo.tables = tableResult.rows;
     }
 
-    // Fetch transfer/transportation info
-    if (keywords.includes('transfer') || keywords.includes('transport') || keywords.includes('airport') || keywords.includes('pickup')) {
+    // --- TRANSFERS ---
+    if (
+      keywords.includes('transfer') ||
+      keywords.includes('transport') ||
+      keywords.includes('airport') ||
+      keywords.includes('pickup')
+    ) {
       const transferQuery = `SELECT * FROM transfer_areas`;
       const transferResult = await pool.query(transferQuery);
       relevantData.generalInfo.transfers = transferResult.rows;
     }
 
-    // Fetch availability/booking dates
-    if (keywords.includes('available') || keywords.includes('book') || keywords.includes('reserve') || keywords.includes('date')) {
+    // --- AVAILABILITY/BOOKING DATES ---
+    if (
+      keywords.includes('available') ||
+      keywords.includes('book') ||
+      keywords.includes('reserve') ||
+      keywords.includes('date')
+    ) {
       const bookedDatesQuery = `SELECT * FROM fully_booked_dates WHERE venue_id = $1 OR venue_id IS NULL`;
-      const bookedResult = restaurantId 
+      const bookedResult = restaurantId
         ? await pool.query(bookedDatesQuery, [restaurantId])
         : await pool.query(`SELECT * FROM fully_booked_dates`);
-      
       relevantData.generalInfo.bookedDates = bookedResult.rows;
     }
-
   } catch (error) {
     console.error('Error fetching relevant data:', error);
   }
@@ -99,6 +163,26 @@ function formatDataForPrompt(data) {
       contextInfo += `  - Email: ${owner.email}\n`;
       contextInfo += `  - Phone: ${owner.phone}\n\n`;
     });
+  }
+
+  // Format menu items if present
+  if (data.menuItems && data.menuItems.length > 0) {
+    contextInfo += "\n**MENU FOR LOFAKI TAVERNA:**\n";
+    let lastCategory = null;
+    data.menuItems.forEach(item => {
+      if (item.category !== lastCategory) {
+        contextInfo += `\n*${item.category}*\n`;
+        lastCategory = item.category;
+      }
+      contextInfo += `- **${item.name}**: ${item.description || ''} (€${item.price})`;
+      const tags = [];
+      if (item.is_vegetarian) tags.push('Vegetarian');
+      if (item.is_vegan) tags.push('Vegan');
+      if (item.is_gluten_free) tags.push('Gluten-Free');
+      if (tags.length > 0) contextInfo += ` [${tags.join(', ')}]`;
+      contextInfo += '\n';
+    });
+    contextInfo += '\n';
   }
 
   // Format table pricing
@@ -133,13 +217,31 @@ function formatDataForPrompt(data) {
 }
 
 export async function askGemini(prompt, history = [], restaurantId = null) {
-  // Fetch relevant data using RAG
   const relevantData = await fetchRelevantData(prompt, restaurantId);
-  const contextInfo = formatDataForPrompt(relevantData);
+  let restaurantName = null;
 
-  const systemPrompt = `
+  if (relevantData.restaurants && relevantData.restaurants.length > 0) {
+    restaurantName = relevantData.restaurants[0].name;
+  } else if (restaurantId) {
+    // Defensive: fetch restaurant name directly if not in array
+    const restaurant = await RestaurantService.getRestaurantById(restaurantId);
+    if (restaurant) restaurantName = restaurant.name;
+  }
+
+  let systemPrompt = `
   You are AICHMI, an expert, friendly, and helpful AI assistant for restaurant reservations in Kos, Greece.
-  
+  `;
+
+  if (restaurantName) {
+    systemPrompt += `
+    You are currently serving as the assistant for **${restaurantName}**.
+    If the user wants to make a reservation, it is always for **${restaurantName}**.
+    Never ask the user which restaurant they want; you already know it.
+    Answer as if you are an expert employee of this restaurant.
+    `;
+  }
+
+  systemPrompt += `
   **IMPORTANT INSTRUCTIONS:**
   - Use the provided relevant information to answer questions accurately
   - Always be polite, concise, and conversational
@@ -151,9 +253,18 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   - Use markdown for lists, bold important details, and keep your answers easy to read
   - When mentioning prices, always include the € symbol
   - For dates, use a clear format (e.g., "July 15, 2025")
+  - When you have collected all the reservation details (restaurant, date, time, number of people, and customer name), reply with:
+    Reservation has been confirmed! Here are the reservation details:
+    RestaurantId: {restaurantId}
+    CustomerName: {customerName}
+    Date: {date}
+    Time: {time}
+    People: {people}
+    SpecialRequests: {specialRequests}
+    For further confirmation, please check your email!
   
   **CONTEXT FOR THIS CONVERSATION:**
-  ${contextInfo}
+  ${formatDataForPrompt(relevantData)}
   `;
 
   let conversation = history.map(msg => `${msg.sender === 'user' ? 'User' : 'AICHMI'}: ${msg.text}`).join('\n');

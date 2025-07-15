@@ -65,6 +65,19 @@ CREATE TABLE tables (
     table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0)
 );
 
+CREATE TABLE menu_item (
+    menu_item_id SERIAL PRIMARY KEY,
+    venue_id INTEGER NOT NULL REFERENCES venue(venue_id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price NUMERIC(8,2) NOT NULL,
+    category VARCHAR(50), -- e.g. 'Appetizer', 'Main', 'Dessert', 'Drink'
+    is_vegetarian BOOLEAN DEFAULT FALSE,
+    is_vegan BOOLEAN DEFAULT FALSE,
+    is_gluten_free BOOLEAN DEFAULT FALSE,
+    available BOOLEAN DEFAULT TRUE
+);
+
 CREATE TABLE reservation (
     reservation_id SERIAL PRIMARY KEY,
     reservation_date DATE NOT NULL CHECK (reservation_date >= CURRENT_DATE),

@@ -111,6 +111,31 @@ class RestaurantService {
             throw error;
         }
     }
+
+    // Get menu items for a specific restaurant by venue_id
+    static async getMenuItemsByVenueId(venueId) {
+        try {
+            const query = `
+                SELECT 
+                    menu_item_id as id,
+                    name,
+                    description,
+                    price,
+                    category,
+                    is_vegetarian,
+                    is_vegan,
+                    is_gluten_free
+                FROM menu_item
+                WHERE venue_id = $1
+                ORDER BY category, price ASC;
+            `;
+            const result = await pool.query(query, [venueId]);
+            return result.rows;
+        } catch (error) {
+            console.error('Error fetching menu items:', error);
+            throw error;
+        }
+    }
 }
 
 export default RestaurantService;

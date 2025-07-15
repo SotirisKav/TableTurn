@@ -40,6 +40,7 @@ function ChatWithAichmi() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: input,
+                    restaurantId: restaurantId ? Number(restaurantId) : null,
                     restaurantName,
                     history: [...messages, userMsg]
                 })
