@@ -1,6 +1,6 @@
 -- Insert venues (restaurants)
 INSERT INTO venue (venue_id, name, address, area, type, rating, pricing, image_url, description, cuisine) VALUES
-(1, 'Lofaki Taverna', 'Kos Harbor Waterfront, 85300 Kos', 'Kos Harbor', 'restaurant', 4.8, 'expensive', 'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1b/ee/e9/0c/dining-under-the-best.jpg?w=900&h=500&s=1', 'Authentic Greek cuisine with fresh seafood and traditional recipes passed down through generations. Located in the beautiful Kos Harbor with stunning sea views.', 'Traditional Greek');
+(1, 'Lofaki Restaurant', 'Agios Nektarios, 85300 Kos', 'Kos Harbor', 'restaurant', 4.8, 'expensive', 'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1b/ee/e9/0c/dining-under-the-best.jpg?w=900&h=500&s=1', 'Authentic Greek cuisine with fresh seafood and traditional recipes passed down through generations. Located in the beautiful Kos Harbor with stunning sea views.', 'Greek & modern cuisine');
 
 -- Insert owners for the venues
 INSERT INTO owner (name, email, phone, venue_id) VALUES
@@ -11,6 +11,28 @@ INSERT INTO tables (table_type, table_price) VALUES
 ('standard', 0.00),
 ('grass', 15.00),
 ('anniversary', 25.00);
+
+INSERT INTO reservation (
+  reservation_name,
+  reservation_email,
+  reservation_phone,
+  reservation_date,
+  reservation_time,
+  guests,
+  table_type,
+  table_price,
+  venue_id
+) VALUES (
+  'John Doe',
+  'johndoe@example.com',
+  '+302241234567',
+  '2025-08-20',      -- <-- update to a future date if needed
+  '20:00',
+  2,
+  'grass',
+  15.00,
+  1                -- venue_id (Lofaki Taverna)
+);
 
 -- Insert transfer areas with pricing
 INSERT INTO transfer_areas (name, price_4_or_less, price_5_to_8) VALUES

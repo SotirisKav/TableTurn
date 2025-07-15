@@ -3,6 +3,7 @@ const router = express.Router();
 
 router.post('/', async (req, res) => {
     try {
+        console.log('Received reservation POST:', req.body);
         const { restaurantId, customerName, date, time, people, specialRequests } = req.body;
         // Save reservation to the database
         const reservation = await ReservationService.createReservation({
@@ -21,17 +22,3 @@ router.post('/', async (req, res) => {
 });
 
 module.exports = router;
-
-function parseReservationDetails(text) {
-  const details = {};
-  const lines = text.split('\n');
-  lines.forEach(line => {
-    if (line.startsWith('RestaurantId:')) details.restaurantId = Number(line.split(':')[1].trim());
-    if (line.startsWith('CustomerName:')) details.customerName = line.split(':')[1].trim();
-    if (line.startsWith('Date:')) details.date = line.split(':')[1].trim();
-    if (line.startsWith('Time:')) details.time = line.split(':')[1].trim();
-    if (line.startsWith('People:')) details.people = Number(line.split(':')[1].trim());
-    if (line.startsWith('SpecialRequests:')) details.specialRequests = line.split(':')[1].trim();
-  });
-  return details;
-}

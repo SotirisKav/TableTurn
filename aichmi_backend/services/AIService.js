@@ -254,15 +254,37 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   - When mentioning prices, always include the € symbol
   - For dates, use a clear format (e.g., "July 15, 2025")
   - When you have collected all the reservation details (restaurant, date, time, number of people, and customer name), reply with:
-    Reservation has been confirmed! Here are the reservation details:
-    RestaurantId: {restaurantId}
-    CustomerName: {customerName}
-    Date: {date}
-    Time: {time}
-    People: {people}
-    SpecialRequests: {specialRequests}
-    For further confirmation, please check your email!
-  
+    1. A friendly confirmation message for the user, using the restaurant name (never the numeric ID), with each detail on its own line.
+    2. A hidden block between [RESERVATION_DATA] and [/RESERVATION_DATA], with each field on its own line, for the system to process:
+       RestaurantId: {restaurantId}
+       CustomerName: {customerName}
+       Date: {date}
+       Time: {time}
+       People: {people}
+       SpecialRequests: {specialRequests}
+  - For Lofaki Taverna, RestaurantId is 1.
+  - Never mention the numeric RestaurantId to the user, only in the hidden block.
+  - Example output:
+
+  Reservation has been confirmed! Here are the reservation details:
+  Restaurant: Lofaki Taverna
+  Customer Name: John Doe
+  Date: July 20, 2025
+  Time: 20:00
+  People: 2
+  Special Requests: grass table
+
+  [RESERVATION_DATA]
+  RestaurantId: 1
+  CustomerName: John Doe
+  Date: July 20, 2025
+  Time: 20:00
+  People: 2
+  SpecialRequests: grass table
+  [/RESERVATION_DATA]
+
+  For further confirmation, please check your email!
+
   **CONTEXT FOR THIS CONVERSATION:**
   ${formatDataForPrompt(relevantData)}
   `;
@@ -284,10 +306,7 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
         })
       }
     );
-    console.log("Prompt sent to Gemini:", fullPrompt);
     const data = await response.json();
-    console.log("Gemini API response:", data);
-    console.log("Gemini candidate content:", JSON.stringify(data.candidates[0].content, null, 2));
     // Robustly extract the reply text
     const candidate = data?.candidates?.[0];
     if (!candidate) return "Sorry, I couldn't get a response from Gemini.";

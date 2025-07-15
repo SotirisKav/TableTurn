@@ -1,5 +1,11 @@
 import pool from '../config/database.js';
 
+function toISODate(dateString) {
+  // Handles 'August 8, 2025' -> '2025-08-08'
+  const d = new Date(dateString);
+  if (isNaN(d)) return null;
+  return d.toISOString().slice(0, 10);
+}
 class RestaurantService {
     // Get all restaurants with their details
     static async getAllRestaurants() {
@@ -135,6 +141,31 @@ class RestaurantService {
             console.error('Error fetching menu items:', error);
             throw error;
         }
+    }
+    
+    static async createReservation({ restaurantId, customerName, date, time, people, specialRequests }) {
+      const isoDate = toISODate(date); // Convert to 'YYYY-MM-DD'
+      const query = `
+        INSERT INTO reservation (
+          restaurant_id,
+          customer_name,
+          reservation_date,
+          reservation_time,
+          guests,
+          table_type
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *;
+      `;
+      const values = [
+        restaurantId,
+        customerName,
+        isoDate,
+        time,
+        people,
+        specialRequests
+      ];
+      const result = await pool.query(query, values);
+      return result.rows[0];
     }
 }
 

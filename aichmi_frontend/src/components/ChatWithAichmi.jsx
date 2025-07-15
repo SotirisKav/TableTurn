@@ -2,6 +2,25 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 
+function stripReservationDataBlock(text) {
+  // Removes the [RESERVATION_DATA] ... [/RESERVATION_DATA] block from the text
+  return text.replace(/\[RESERVATION_DATA\][\s\S]*?\[\/RESERVATION_DATA\]/g, '').trim();
+}
+
+function parseReservationDetails(text) {
+  const details = {};
+  const lines = text.split('\n');
+  lines.forEach(line => {
+    if (line.startsWith('RestaurantId:')) details.restaurantId = Number(line.split(':')[1].trim());
+    if (line.startsWith('CustomerName:')) details.customerName = line.split(':')[1].trim();
+    if (line.startsWith('Date:')) details.date = line.split(':')[1].trim();
+    if (line.startsWith('Time:')) details.time = line.split(':')[1].trim();
+    if (line.startsWith('People:')) details.people = Number(line.split(':')[1].trim());
+    if (line.startsWith('SpecialRequests:')) details.specialRequests = line.split(':')[1].trim();
+  });
+  return details;
+}
+
 function ChatWithAichmi() {
     const { restaurantId } = useParams();
     const [restaurantName, setRestaurantName] = useState(null);
@@ -46,7 +65,20 @@ function ChatWithAichmi() {
                 })
             });
             const data = await res.json();
-            setMessages(msgs => [...msgs, { sender: 'ai', text: data.response }]);
+            const aiText = data.response;
+            setMessages(msgs => [...msgs, { sender: 'ai', text: stripReservationDataBlock(aiText) }]);
+
+            // Detect reservation confirmation and trigger API call
+            if (aiText.includes('[RESERVATION_DATA]')) {
+              const details = parseReservationDetails(aiText); // your existing function
+              console.log('Sending reservation details:', details); // <-- Add this
+              await fetch('/api/reservation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(details)
+              });
+              setMessages(msgs => [...msgs, { sender: 'ai', text: '✅ Your reservation has been saved in our system!' }]);
+            }
         } catch (err) {
             setMessages(msgs => [...msgs, { sender: 'ai', text: 'Sorry, there was an error contacting the AI.' }]);
         } finally {
