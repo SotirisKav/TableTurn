@@ -58,6 +58,12 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       ) {
         relevantData.menuItems = await RestaurantService.getMenuItemsByVenueId(restaurantId);
       }
+
+      const tableTypesRes = await pool.query(
+        'SELECT table_type FROM table_inventory WHERE venue_id = $1 AND max_tables > 0',
+        [restaurantId]
+      );
+      relevantData.availableTableTypes = tableTypesRes.rows.map(row => row.table_type);
     } else if (
       keywords.includes('restaurant') ||
       keywords.includes('menu') ||
@@ -165,6 +171,11 @@ function formatDataForPrompt(data) {
     });
   }
 
+  if (data.availableTableTypes && data.availableTableTypes.length > 0) {
+    contextInfo += "\n**AVAILABLE TABLE TYPES FOR THIS RESTAURANT:**\n";
+    contextInfo += data.availableTableTypes.map(t => `- ${t}`).join('\n') + '\n';
+  }
+
   // Format menu items if present
   if (data.menuItems && data.menuItems.length > 0) {
     contextInfo += "\n**MENU FOR LOFAKI TAVERNA:**\n";
@@ -245,23 +256,36 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   **IMPORTANT INSTRUCTIONS:**
   - Use the provided relevant information to answer questions accurately
   - Always be polite, concise, and conversational
-  - If the user asks to make a reservation, ask for all necessary details (date, time, number of people, special requests)
+  - If the user asks to make a reservation, ask for all necessary details (date, time, number of people, special requests and table type)
   - If the user asks about a restaurant, provide information using the data provided below
   - If the user asks for something you can't do, politely explain your limitations
   - Always confirm details before finalizing a reservation
   - If the user provides incomplete information, ask clarifying questions
   - Use markdown for lists, bold important details, and keep your answers easy to read
   - When mentioning prices, always include the € symbol
+  - When asking the user for table type preference, only mention the available table types listed in the context (e.g., grass, standard, anniversary).
+  - Always inform the user of the extra pricing of a table if there is, if he is interested in it.
+  - Do not offer or accept table types that are not listed as available for this restaurant.
   - For dates, use a clear format (e.g., "July 15, 2025")
-  - When you have collected all the reservation details (restaurant, date, time, number of people, and customer name), reply with:
-    1. A friendly confirmation message for the user, using the restaurant name (never the numeric ID), with each detail on its own line.
-    2. A hidden block between [RESERVATION_DATA] and [/RESERVATION_DATA], with each field on its own line, for the system to process:
-       RestaurantId: {restaurantId}
-       CustomerName: {customerName}
-       Date: {date}
-       Time: {time}
-       People: {people}
-       SpecialRequests: {specialRequests}
+  - When you have collected all the reservation details (restaurant, date, time, number of people, customer name, customer email, customer phone, table type), first ask the user to confirm them if he answers positively, reply with:
+  1. A friendly confirmation message for the user, using the restaurant name (never the numeric ID), with each detail on its own line.
+  2. A hidden block between [RESERVATION_DATA] and [/RESERVATION_DATA], with each field on its own line, for the system to process:
+     RestaurantId: {restaurantId}
+     CustomerName: {customerName}
+     CustomerEmail: {customerEmail}
+     CustomerPhone: {customerPhone}
+     Date: {date}
+     Time: {time}
+     People: {people}
+     TableType: {tableType}
+     SpecialRequests: {specialRequests}
+     CelebrationType: {celebrationType}
+     Cake: {cake}
+     CakePrice: {cakePrice}
+     Flowers: {flowers}
+     FlowersPrice: {flowersPrice}
+     HotelName: {hotelName}
+     HotelId: {hotelId}
   - For Lofaki Taverna, RestaurantId is 1.
   - Never mention the numeric RestaurantId to the user, only in the hidden block.
   - Example output:
@@ -277,10 +301,20 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   [RESERVATION_DATA]
   RestaurantId: 1
   CustomerName: John Doe
-  Date: July 20, 2025
+  CustomerEmail: johndoe@example.com
+  CustomerPhone: +302241234567
+  Date: August 8, 2025
   Time: 20:00
   People: 2
+  TableType: grass
   SpecialRequests: grass table
+  CelebrationType: anniversary
+  Cake: true
+  CakePrice: 30.00
+  Flowers: false
+  FlowersPrice: 0
+  HotelName: Kos Palace Hotel
+  HotelId: 1
   [/RESERVATION_DATA]
 
   For further confirmation, please check your email!

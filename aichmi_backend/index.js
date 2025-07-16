@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import RestaurantService from './services/RestaurantService.js';
 import chatRouter from './routes/chat.js';
+import reservationRouter from './routes/reservation.js';
 
 dotenv.config();
 
@@ -53,6 +54,9 @@ app.get('/api/restaurants/:id', async (req, res) => {
 
 // Chat/AI Route
 app.use('/api/chat', chatRouter);
+
+// Reservation Route
+app.use('/api/reservation', reservationRouter);
 
 // Legacy EJS route (for backward compatibility)
 app.get('/legacy', (req, res) => {

@@ -143,26 +143,113 @@ class RestaurantService {
         }
     }
     
-    static async createReservation({ restaurantId, customerName, date, time, people, specialRequests }) {
-      const isoDate = toISODate(date); // Convert to 'YYYY-MM-DD'
+    // Check if a table of a given type is available for a venue on a specific date
+    static async isTableAvailable({ venueId, tableType, reservationDate }) {
+        // 1. Get max tables for this type
+        const invRes = await pool.query(
+          'SELECT max_tables FROM table_inventory WHERE venue_id = $1 AND table_type = $2',
+          [venueId, tableType]
+        );
+        if (invRes.rowCount === 0) {
+          throw new Error('No inventory set for this table type at this venue.');
+        }
+        const maxTables = invRes.rows[0].max_tables;
+
+        // 2. Count existing reservations for this type
+        const resRes = await pool.query(
+          'SELECT COUNT(*) FROM reservation WHERE venue_id = $1 AND table_type = $2 AND reservation_date = $3',
+          [venueId, tableType, reservationDate]
+        );
+        const reservedCount = Number(resRes.rows[0].count);
+
+        // 3. For grass tables, subtract 2 for each special table booked
+        let grassAdjustment = 0;
+        if (tableType === 'grass') {
+          const specialRes = await pool.query(
+            'SELECT COUNT(*) FROM reservation WHERE venue_id = $1 AND table_type = $2 AND reservation_date = $3',
+            [venueId, 'special', reservationDate]
+          );
+          grassAdjustment = Number(specialRes.rows[0].count) * 2;
+        }
+
+        // 4. For special tables, ensure no more than 2 are booked
+        if (tableType === 'special' && reservedCount >= 2) {
+          return false;
+        }
+
+        // 5. Check if available
+        if (tableType === 'grass') {
+          return (reservedCount + grassAdjustment) < maxTables;
+        } else {
+          return reservedCount < maxTables;
+        }
+    }
+    
+    static async createReservation({
+      venueId,
+      reservationName,
+      reservationEmail,
+      reservationPhone,
+      date,
+      time,
+      guests,
+      tableType,
+      celebrationType = null,
+      cake = false,
+      cakePrice = null,
+      flowers = false,
+      flowersPrice = null,
+      hotelName = null,
+      hotelId = null,
+      specialRequests = null
+    }) {
+      // 1. Check table availability
+      const available = await RestaurantService.isTableAvailable({
+        venueId,
+        tableType,
+        reservationDate: toISODate(date)
+      });
+      if (!available) {
+        throw new Error('No tables of this type available for the selected date.');
+      }
+
+      // 2. Insert reservation
       const query = `
         INSERT INTO reservation (
-          restaurant_id,
-          customer_name,
+          reservation_name,
+          reservation_email,
+          reservation_phone,
           reservation_date,
           reservation_time,
           guests,
-          table_type
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+          table_type,
+          celebration_type,
+          cake,
+          cake_price,
+          flowers,
+          flowers_price,
+          hotel_name,
+          hotel_id,
+          venue_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         RETURNING *;
       `;
       const values = [
-        restaurantId,
-        customerName,
-        isoDate,
+        reservationName,
+        reservationEmail,
+        reservationPhone,
+        toISODate(date),
         time,
-        people,
-        specialRequests
+        guests,
+        tableType,
+        celebrationType,
+        cake,
+        cakePrice,
+        flowers,
+        flowersPrice,
+        hotelName,
+        hotelId,
+        venueId
       ];
       const result = await pool.query(query, values);
       return result.rows[0];

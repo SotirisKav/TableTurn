@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS venue CASCADE;
 DROP TABLE IF EXISTS bot_modules CASCADE;
 DROP TABLE IF EXISTS bot_config CASCADE;
 DROP TABLE IF EXISTS menu_item CASCADE;
+DROP TABLE IF EXISTS table_inventory CASCADE;
 
 
 CREATE TABLE venue (
@@ -54,8 +55,15 @@ CREATE TABLE hotel (
 
 CREATE TABLE tables (
     table_id SERIAL PRIMARY KEY,
-    table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'anniversary')),
+    table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'special')),
     table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0)
+);
+
+CREATE TABLE table_inventory (
+    inventory_id SERIAL PRIMARY KEY,
+    venue_id INT NOT NULL REFERENCES venue(venue_id) ON DELETE CASCADE,
+    table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'special')),
+    max_tables INT NOT NULL CHECK (max_tables >= 0)
 );
 
 CREATE TABLE menu_item (
@@ -81,7 +89,6 @@ CREATE TABLE reservation (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     guests INT NOT NULL CHECK (guests > 0),
     table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'anniversary')),
-    table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0),
     celebration_type TEXT CHECK (celebration_type IN ('birthday', 'anniversary', 'honeymoon', 'none')),
     cake BOOLEAN DEFAULT FALSE,
     cake_price NUMERIC(5,2) CHECK (cake_price >= 0),

@@ -11,12 +11,39 @@ function parseReservationDetails(text) {
   const details = {};
   const lines = text.split('\n');
   lines.forEach(line => {
-    if (line.startsWith('RestaurantId:')) details.restaurantId = Number(line.split(':')[1].trim());
-    if (line.startsWith('CustomerName:')) details.customerName = line.split(':')[1].trim();
-    if (line.startsWith('Date:')) details.date = line.split(':')[1].trim();
-    if (line.startsWith('Time:')) details.time = line.split(':')[1].trim();
-    if (line.startsWith('People:')) details.people = Number(line.split(':')[1].trim());
-    if (line.startsWith('SpecialRequests:')) details.specialRequests = line.split(':')[1].trim();
+    const getValue = (prefix) => {
+      const value = line.split(':')[1]?.trim();
+      return value === '' ? null : value;
+    };
+
+    if (line.startsWith('RestaurantId:')) details.venueId = Number(getValue('RestaurantId:'));
+    if (line.startsWith('CustomerName:')) details.reservationName = getValue('CustomerName:');
+    if (line.startsWith('CustomerEmail:')) details.reservationEmail = getValue('CustomerEmail:');
+    if (line.startsWith('CustomerPhone:')) details.reservationPhone = getValue('CustomerPhone:');
+    if (line.startsWith('Date:')) details.date = getValue('Date:');
+    if (line.startsWith('Time:')) {
+      let t = getValue('Time:');
+      // Normalize to HH:MM if only hour is provided
+      if (t && /^\d{1,2}$/.test(t)) {
+        t = t.padStart(2, '0') + ':00';
+      }
+      details.time = t;
+    }
+    if (line.startsWith('People:')) details.guests = Number(getValue('People:'));
+    if (line.startsWith('TableType:')) details.tableType = getValue('TableType:');
+    if (line.startsWith('CelebrationType:')) details.celebrationType = getValue('CelebrationType:');
+    if (line.startsWith('Cake:')) details.cake = getValue('Cake:')?.toLowerCase() === 'true';
+    if (line.startsWith('CakePrice:')) details.cakePrice = Number(getValue('CakePrice:'));
+    if (line.startsWith('Flowers:')) details.flowers = getValue('Flowers:')?.toLowerCase() === 'true';
+    if (line.startsWith('FlowersPrice:')) details.flowersPrice = Number(getValue('FlowersPrice:'));
+    if (line.startsWith('HotelName:')) details.hotelName = getValue('HotelName:');
+    if (line.startsWith('HotelId:')) {
+      const num = getValue('HotelId:');
+      details.hotelId = num === null ? null : Number(num);
+      // If the value is 0, treat as null (since 0 is not a valid hotel_id)
+      if (details.hotelId === 0) details.hotelId = null;
+    }
+    if (line.startsWith('SpecialRequests:')) details.specialRequests = getValue('SpecialRequests:');
   });
   return details;
 }
@@ -72,11 +99,12 @@ function ChatWithAichmi() {
             if (aiText.includes('[RESERVATION_DATA]')) {
               const details = parseReservationDetails(aiText); // your existing function
               console.log('Sending reservation details:', details); // <-- Add this
-              await fetch('/api/reservation', {
+              const response = await fetch('/api/reservation', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(details)
               });
+              console.log('Reservation API response:', await response.json());
               setMessages(msgs => [...msgs, { sender: 'ai', text: '✅ Your reservation has been saved in our system!' }]);
             }
         } catch (err) {
