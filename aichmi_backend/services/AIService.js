@@ -227,6 +227,25 @@ function formatDataForPrompt(data) {
   return contextInfo;
 }
 
+function extractReservationFromResponse(responseText) {
+  const match = responseText.match(/\[RESERVATION_DATA\]([\s\S]*?)\[\/RESERVATION_DATA\]/);
+  if (!match) return null;
+
+  const dataBlock = match[1];
+  const lines = dataBlock.split('\n').filter(line => line.trim());
+  
+  const reservation = {};
+  lines.forEach(line => {
+    const [key, ...valueParts] = line.split(':');
+    if (key && valueParts.length > 0) {
+      const value = valueParts.join(':').trim();
+      reservation[key.trim()] = value;
+    }
+  });
+
+  return reservation;
+}
+
 export async function askGemini(prompt, history = [], restaurantId = null) {
   const relevantData = await fetchRelevantData(prompt, restaurantId);
   let restaurantName = null;
@@ -267,10 +286,13 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   - Always inform the user of the extra pricing of a table if there is, if he is interested in it.
   - Do not offer or accept table types that are not listed as available for this restaurant.
   - For dates, use a clear format (e.g., "July 15, 2025")
-  - When you have collected all the reservation details (restaurant, date, time, number of people, customer name, customer email, customer phone, table type), first ask the user to confirm them if he answers positively, reply with:
-  1. A friendly confirmation message for the user, using the restaurant name (never the numeric ID), with each detail on its own line.
-  2. A hidden block between [RESERVATION_DATA] and [/RESERVATION_DATA], with each field on its own line, for the system to process:
+  IMPORTANT: When the user confirms a reservation, you MUST reply with:
+  1. A confirmation message (e.g., "Perfect! Your reservation is confirmed! 🎉")
+  2. IMMEDIATELY AFTER, a hidden block between [RESERVATION_DATA] and [/RESERVATION_DATA], with each field on its own line, for the system to process.
+
+  DO NOT CONFIRM A RESERVATION WITHOUT INCLUDING THE [RESERVATION_DATA] BLOCK.
      RestaurantId: {restaurantId}
+     RestaurantName: {restaurantName}
      CustomerName: {customerName}
      CustomerEmail: {customerEmail}
      CustomerPhone: {customerPhone}
@@ -290,41 +312,41 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   - Never mention the numeric RestaurantId to the user, only in the hidden block.
   - Example output:
 
-  Reservation has been confirmed! Here are the reservation details:
-  Restaurant: Lofaki Taverna
-  Customer Name: John Doe
-  Date: July 20, 2025
-  Time: 20:00
-  People: 2
-  Special Requests: grass table
+  Perfect! Your reservation is confirmed! 🎉
 
   [RESERVATION_DATA]
   RestaurantId: 1
+  RestaurantName: Lofaki Taverna
   CustomerName: John Doe
   CustomerEmail: johndoe@example.com
   CustomerPhone: +302241234567
-  Date: August 8, 2025
+  Date: 2025-08-08
   Time: 20:00
   People: 2
   TableType: grass
-  SpecialRequests: grass table
-  CelebrationType: anniversary
-  Cake: true
-  CakePrice: 30.00
+  SpecialRequests: null
+  CelebrationType: null
+  Cake: false
+  CakePrice: 0
   Flowers: false
   FlowersPrice: 0
-  HotelName: Kos Palace Hotel
-  HotelId: 1
+  HotelName: null
+  HotelId: null
   [/RESERVATION_DATA]
-
-  For further confirmation, please check your email!
 
   **CONTEXT FOR THIS CONVERSATION:**
   ${formatDataForPrompt(relevantData)}
   `;
 
-  let conversation = history.map(msg => `${msg.sender === 'user' ? 'User' : 'AICHMI'}: ${msg.text}`).join('\n');
-  const fullPrompt = `${systemPrompt}\n\n${conversation}\nUser: ${prompt}\nAICHMI:`;
+  // Build structured messages for Gemini
+  const contents = [
+    { role: "user", parts: [{ text: systemPrompt }] }, // system prompt as user message
+    ...history.map(msg => ({
+      role: msg.sender === "user" ? "user" : "model",
+      parts: [{ text: msg.text }]
+    })),
+    { role: "user", parts: [{ text: prompt }] }
+  ];
 
   try {
     const response = await fetch(
@@ -335,29 +357,70 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
           'Content-Type': 'application/json',
           'X-goog-api-key': GEMINI_API_KEY
         },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }]
-        })
+        body: JSON.stringify({ contents })
       }
     );
+    
     const data = await response.json();
-    // Robustly extract the reply text
     const candidate = data?.candidates?.[0];
-    if (!candidate) return "Sorry, I couldn't get a response from Gemini.";
+    if (!candidate) return { type: 'message', response: "Sorry, I couldn't get a response from Gemini." };
 
     const content = candidate.content;
-    if (!content) return "Sorry, I couldn't get a response from Gemini.";
+    if (!content) return { type: 'message', response: "Sorry, I couldn't get a response from Gemini." };
 
-    // Try both possible structures:
+    let aiResponse;
     if (Array.isArray(content.parts) && content.parts[0]?.text) {
-      return content.parts[0].text;
+      aiResponse = content.parts[0].text;
+    } else if (typeof content.text === "string") {
+      aiResponse = content.text;
+    } else {
+      return { type: 'message', response: "Sorry, I couldn't get a response from Gemini." };
     }
-    if (typeof content.text === "string") {
-      return content.text;
+
+    // Check if the response contains reservation data
+    const reservationData = extractReservationFromResponse(aiResponse);
+    
+    if (reservationData) {
+      // Remove the hidden block from the user-facing response
+      const cleanResponse = aiResponse.replace(/\[RESERVATION_DATA\][\s\S]*?\[\/RESERVATION_DATA\]/g, '').trim();
+      
+      // Format the reservation details for the confirmation page
+      const formattedReservation = {
+        restaurant: reservationData.RestaurantName || restaurantName,
+        name: reservationData.CustomerName || '',
+        email: reservationData.CustomerEmail || '',
+        phone: reservationData.CustomerPhone || '',
+        date: reservationData.Date || '',
+        time: reservationData.Time || '',
+        partySize: reservationData.People || '',
+        tableType: reservationData.TableType || '',
+        specialRequests: reservationData.SpecialRequests === 'None' ? '' : reservationData.SpecialRequests || '',
+        celebrationType: reservationData.CelebrationType === 'None' ? '' : reservationData.CelebrationType || '',
+        cake: reservationData.Cake === 'true',
+        cakePrice: parseFloat(reservationData.CakePrice || 0),
+        flowers: reservationData.Flowers === 'true',
+        flowersPrice: parseFloat(reservationData.FlowersPrice || 0),
+        hotelName: reservationData.HotelName === 'None' ? '' : reservationData.HotelName || '',
+        restaurantId: reservationData.RestaurantId || restaurantId
+      };
+
+      return {
+        type: 'redirect',
+        response: cleanResponse,
+        reservationDetails: formattedReservation
+      };
     }
-    return "Sorry, I couldn't get a response from Gemini.";
+
+    return {
+      type: 'message',
+      response: aiResponse
+    };
+
   } catch (error) {
     console.error('Error calling Gemini API:', error);
-    return "Sorry, I'm having trouble connecting to the AI service right now. Please try again later.";
+    return {
+      type: 'message',
+      response: "Sorry, I'm having trouble connecting to the AI service right now. Please try again later."
+    };
   }
 }

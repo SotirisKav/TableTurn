@@ -1,55 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-
-function stripReservationDataBlock(text) {
-  // Removes the [RESERVATION_DATA] ... [/RESERVATION_DATA] block from the text
-  return text.replace(/\[RESERVATION_DATA\][\s\S]*?\[\/RESERVATION_DATA\]/g, '').trim();
-}
-
-function parseReservationDetails(text) {
-  const details = {};
-  const lines = text.split('\n');
-  lines.forEach(line => {
-    const getValue = (prefix) => {
-      const value = line.split(':')[1]?.trim();
-      return value === '' ? null : value;
-    };
-
-    if (line.startsWith('RestaurantId:')) details.venueId = Number(getValue('RestaurantId:'));
-    if (line.startsWith('CustomerName:')) details.reservationName = getValue('CustomerName:');
-    if (line.startsWith('CustomerEmail:')) details.reservationEmail = getValue('CustomerEmail:');
-    if (line.startsWith('CustomerPhone:')) details.reservationPhone = getValue('CustomerPhone:');
-    if (line.startsWith('Date:')) details.date = getValue('Date:');
-    if (line.startsWith('Time:')) {
-      let t = getValue('Time:');
-      // Normalize to HH:MM if only hour is provided
-      if (t && /^\d{1,2}$/.test(t)) {
-        t = t.padStart(2, '0') + ':00';
-      }
-      details.time = t;
-    }
-    if (line.startsWith('People:')) details.guests = Number(getValue('People:'));
-    if (line.startsWith('TableType:')) details.tableType = getValue('TableType:');
-    if (line.startsWith('CelebrationType:')) details.celebrationType = getValue('CelebrationType:');
-    if (line.startsWith('Cake:')) details.cake = getValue('Cake:')?.toLowerCase() === 'true';
-    if (line.startsWith('CakePrice:')) details.cakePrice = Number(getValue('CakePrice:'));
-    if (line.startsWith('Flowers:')) details.flowers = getValue('Flowers:')?.toLowerCase() === 'true';
-    if (line.startsWith('FlowersPrice:')) details.flowersPrice = Number(getValue('FlowersPrice:'));
-    if (line.startsWith('HotelName:')) details.hotelName = getValue('HotelName:');
-    if (line.startsWith('HotelId:')) {
-      const num = getValue('HotelId:');
-      details.hotelId = num === null ? null : Number(num);
-      // If the value is 0, treat as null (since 0 is not a valid hotel_id)
-      if (details.hotelId === 0) details.hotelId = null;
-    }
-    if (line.startsWith('SpecialRequests:')) details.specialRequests = getValue('SpecialRequests:');
-  });
-  return details;
-}
 
 function ChatWithAichmi() {
     const { restaurantId } = useParams();
+    const navigate = useNavigate();
     const [restaurantName, setRestaurantName] = useState(null);
     const [messages, setMessages] = useState([
         { sender: 'ai', text: 'Hi! I am AICHMI, your AI assistant. How can I help with your reservation or special request today?' }
@@ -76,10 +31,12 @@ function ChatWithAichmi() {
     const handleSend = async (e) => {
         e.preventDefault();
         if (!input.trim() || loading) return;
+        
         const userMsg = { sender: 'user', text: input };
         setMessages(msgs => [...msgs, userMsg]);
         setInput('');
         setLoading(true);
+        
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
@@ -91,23 +48,73 @@ function ChatWithAichmi() {
                     history: [...messages, userMsg]
                 })
             });
+            
             const data = await res.json();
-            const aiText = data.response;
-            setMessages(msgs => [...msgs, { sender: 'ai', text: stripReservationDataBlock(aiText) }]);
+            console.log('Received data from backend:', data); // Debug log
+            
+            // Add AI message to chat
+            setMessages(msgs => [...msgs, { sender: 'ai', text: data.response }]);
 
-            // Detect reservation confirmation and trigger API call
-            if (aiText.includes('[RESERVATION_DATA]')) {
-              const details = parseReservationDetails(aiText); // your existing function
-              console.log('Sending reservation details:', details); // <-- Add this
-              const response = await fetch('/api/reservation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(details)
-              });
-              console.log('Reservation API response:', await response.json());
-              setMessages(msgs => [...msgs, { sender: 'ai', text: '✅ Your reservation has been saved in our system!' }]);
+            // Check if this is a redirect response (new logic)
+            if (data.type === 'redirect' && data.reservationDetails) {
+                console.log('Redirect detected, reservation details:', data.reservationDetails);
+                
+                // Convert the reservation details to the format expected by your reservation API
+                const reservationData = {
+                    venueId: data.reservationDetails.restaurantId || Number(restaurantId),
+                    reservationName: data.reservationDetails.name,
+                    reservationEmail: data.reservationDetails.email,
+                    reservationPhone: data.reservationDetails.phone,
+                    date: data.reservationDetails.date,
+                    time: data.reservationDetails.time,
+                    guests: Number(data.reservationDetails.partySize),
+                    tableType: data.reservationDetails.tableType,
+                    // Fix these null value mappings:
+                    celebrationType: data.reservationDetails.celebrationType === 'None' || 
+                                    data.reservationDetails.celebrationType === 'null' || 
+                                    !data.reservationDetails.celebrationType ? null : data.reservationDetails.celebrationType,
+                    cake: data.reservationDetails.cake === true || data.reservationDetails.cake === 'true',
+                    cakePrice: data.reservationDetails.cakePrice || 0,
+                    flowers: data.reservationDetails.flowers === true || data.reservationDetails.flowers === 'true',
+                    flowersPrice: data.reservationDetails.flowersPrice || 0,
+                    hotelName: data.reservationDetails.hotelName === 'None' || 
+                               data.reservationDetails.hotelName === 'null' || 
+                               !data.reservationDetails.hotelName ? null : data.reservationDetails.hotelName,
+                    hotelId: data.reservationDetails.hotelId === 'null' || 
+                             data.reservationDetails.hotelId === '0' || 
+                             !data.reservationDetails.hotelId ? null : Number(data.reservationDetails.hotelId),
+                    specialRequests: data.reservationDetails.specialRequests === 'None' || 
+                                    data.reservationDetails.specialRequests === 'null' || 
+                                    !data.reservationDetails.specialRequests ? null : data.reservationDetails.specialRequests
+                };
+
+                console.log('Sending reservation data to API:', reservationData);
+                
+                // Send to reservation API
+                const reservationResponse = await fetch('/api/reservation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reservationData)
+                });
+                
+                const reservationResult = await reservationResponse.json();
+                console.log('Reservation API response:', reservationResult);
+                
+                if (reservationResponse.ok) {
+                    // Navigate to confirmation page
+                    navigate('/confirmation', { state: reservationData });
+                } else {
+                    // Handle reservation error
+                    setMessages(msgs => [...msgs, { 
+                        sender: 'ai', 
+                        text: `Sorry, there was an error saving your reservation: ${reservationResult.error || 'Unknown error'}` 
+                    }]);
+                }
+                return;
             }
+            
         } catch (err) {
+            console.error('Error in handleSend:', err);
             setMessages(msgs => [...msgs, { sender: 'ai', text: 'Sorry, there was an error contacting the AI.' }]);
         } finally {
             setLoading(false);

@@ -7,7 +7,7 @@ import Footer from './components/Footer';
 import BrowseRestaurants from './components/BrowseRestaurants';
 import Reservation from './components/Reservation'; 
 import ChatWithAichmi from './components/ChatWithAichmi';
-
+import Confirmation from './components/Confirmation';
 import './App.css';
 
 function App() {
@@ -25,6 +25,7 @@ function App() {
         <Route path="/browse-festivals" element={<div style={{padding:'4rem',textAlign:'center'}}><h1>Browse Festivals (Coming Soon)</h1><p>Discover Greek festivals and events soon on AICHMI!</p></div>} />
         <Route path="/reservation/:restaurantId" element={<Reservation />} />
         <Route path="/chat/:restaurantId?" element={<ChatWithAichmi />} />
+        <Route path="/confirmation" element={<Confirmation />} />
         <Route path="/about" element={<About />} />
       </Routes>
       <Footer />

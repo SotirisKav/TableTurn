@@ -17,19 +17,17 @@ router.post('/', async (req, res) => {
 
     console.log('Calling askGemini with:', { message, historyLength: history.length, restaurantId });
     
-    const response = await askGemini(message, history, restaurantId);
+    const result = await askGemini(message, history, restaurantId);
     
     console.log('=== AI RESPONSE READY ===');
-    console.log('Response to send to frontend:', response);
+    console.log('Response type:', result.type);
+    console.log('Response to send to frontend:', result.response);
     
-    const responseObj = { 
-      response,
+    // Send the result as-is (it already has the correct structure)
+    res.json({
+      ...result,
       timestamp: new Date().toISOString()
-    };
-    
-    console.log('Final response object:', responseObj);
-    
-    res.json(responseObj);
+    });
     
     console.log('=== RESPONSE SENT ===');
     
