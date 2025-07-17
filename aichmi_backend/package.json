@@ -7,6 +7,7 @@
     "start": "node index.js",
     "build-and-start": "cd ../aichmi_frontend && npm run build && cd ../aichmi_backend && npm start"
   },
+  "type": "module",
   "keywords": [],
   "author": "",
   "license": "ISC",

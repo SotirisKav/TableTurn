@@ -1,26 +1,20 @@
 DROP DATABASE IF EXISTS aichmi;
 CREATE DATABASE aichmi;
 
-DROP TABLE IF EXISTS response_templates;
-DROP TABLE IF EXISTS fully_booked_dates;
-DROP TABLE IF EXISTS wedding_dates;
-DROP TABLE IF EXISTS reservation;
-DROP TABLE IF EXISTS tables;
-DROP TABLE IF EXISTS hotel;
-DROP TABLE IF EXISTS transfer_areas;
-DROP TABLE IF EXISTS owner;
-DROP TABLE IF EXISTS venue;
-DROP TABLE IF EXISTS customer;
-DROP TABLE IF EXISTS bot_modules;
-DROP TABLE IF EXISTS bot_config;
+DROP TABLE IF EXISTS response_templates CASCADE;
+DROP TABLE IF EXISTS fully_booked_dates CASCADE;
+DROP TABLE IF EXISTS wedding_dates CASCADE;
+DROP TABLE IF EXISTS reservation CASCADE;
+DROP TABLE IF EXISTS tables CASCADE;
+DROP TABLE IF EXISTS hotel CASCADE;
+DROP TABLE IF EXISTS transfer_areas CASCADE;
+DROP TABLE IF EXISTS owner CASCADE;
+DROP TABLE IF EXISTS venue CASCADE;
+DROP TABLE IF EXISTS bot_modules CASCADE;
+DROP TABLE IF EXISTS bot_config CASCADE;
+DROP TABLE IF EXISTS menu_item CASCADE;
+DROP TABLE IF EXISTS table_inventory CASCADE;
 
-CREATE TABLE customer (
-    customer_id SERIAL PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    phone VARCHAR(20),
-    CONSTRAINT customer_email_format CHECK (email ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$')
-);
 
 CREATE TABLE venue (
     venue_id SERIAL PRIMARY KEY,
@@ -28,7 +22,7 @@ CREATE TABLE venue (
     address VARCHAR(255) NOT NULL,
     area VARCHAR(50) NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('restaurant', 'hotel')),
-    rating COMMENT 'Rating from 1 to 5' NUMERIC(2,1) CHECK (rating >= 1 AND rating <= 5),
+    rating NUMERIC(2,1) CHECK (rating >= 1 AND rating <= 5),
     pricing TEXT NOT NULL CHECK (pricing IN ('affordable', 'moderate', 'expensive')),
     image_url VARCHAR(500),
     description TEXT,
@@ -61,18 +55,40 @@ CREATE TABLE hotel (
 
 CREATE TABLE tables (
     table_id SERIAL PRIMARY KEY,
-    table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'anniversary')),
+    table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'special')),
     table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0)
+);
+
+CREATE TABLE table_inventory (
+    inventory_id SERIAL PRIMARY KEY,
+    venue_id INT NOT NULL REFERENCES venue(venue_id) ON DELETE CASCADE,
+    table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'special')),
+    max_tables INT NOT NULL CHECK (max_tables >= 0)
+);
+
+CREATE TABLE menu_item (
+    menu_item_id SERIAL PRIMARY KEY,
+    venue_id INTEGER NOT NULL REFERENCES venue(venue_id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price NUMERIC(8,2) NOT NULL,
+    category VARCHAR(50), -- e.g. 'Appetizer', 'Main', 'Dessert', 'Drink'
+    is_vegetarian BOOLEAN DEFAULT FALSE,
+    is_vegan BOOLEAN DEFAULT FALSE,
+    is_gluten_free BOOLEAN DEFAULT FALSE,
+    available BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE reservation (
     reservation_id SERIAL PRIMARY KEY,
+    reservation_name TEXT NOT NULL,
+    reservation_email TEXT NOT NULL CHECK (reservation_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
+    reservation_phone TEXT NOT NULL,
     reservation_date DATE NOT NULL CHECK (reservation_date >= CURRENT_DATE),
     reservation_time TIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     guests INT NOT NULL CHECK (guests > 0),
     table_type TEXT NOT NULL CHECK (table_type IN ('standard', 'grass', 'anniversary')),
-    table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0),
     celebration_type TEXT CHECK (celebration_type IN ('birthday', 'anniversary', 'honeymoon', 'none')),
     cake BOOLEAN DEFAULT FALSE,
     cake_price NUMERIC(5,2) CHECK (cake_price >= 0),
@@ -80,18 +96,16 @@ CREATE TABLE reservation (
     flowers_price NUMERIC(5,2) CHECK (flowers_price >= 0),
     hotel_name TEXT,
     hotel_id INT,
-    customer_id INT NOT NULL,
+    venue_id INT NOT NULL,
     FOREIGN KEY (hotel_id) REFERENCES hotel(hotel_id),
-    FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
+    FOREIGN KEY (venue_id) REFERENCES venue(venue_id) ON DELETE CASCADE
 );
 
 CREATE TABLE wedding_dates (
     wedding_date_id SERIAL PRIMARY KEY,
     wedding_date DATE NOT NULL CHECK (wedding_date >= CURRENT_DATE),
-    customer_id INT NOT NULL,
     reservation_id INT NOT NULL,
     venue_id INT NOT NULL,
-    FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
     FOREIGN KEY (reservation_id) REFERENCES reservation(reservation_id) ON DELETE CASCADE,
     FOREIGN KEY (venue_id) REFERENCES venue(venue_id) ON DELETE CASCADE
 );
