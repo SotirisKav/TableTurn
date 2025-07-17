@@ -2,12 +2,14 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import MainContent from './components/MainContent';
+import DoBusiness from './components/DoBusiness';
 import About from './components/About';
 import Footer from './components/Footer';
 import BrowseRestaurants from './components/BrowseRestaurants';
 import Reservation from './components/Reservation'; 
 import ChatWithAichmi from './components/ChatWithAichmi';
 import Confirmation from './components/Confirmation';
+import Subscriptions from './components/Subscriptions';
 import './App.css';
 
 function App() {
@@ -19,6 +21,8 @@ function App() {
           <>
             <HeroSection />
             <MainContent />
+            <DoBusiness />
+            {/* Removed About section from home page */}
           </>
         } />
         <Route path="/browse-restaurants" element={<BrowseRestaurants />} />
@@ -27,6 +31,7 @@ function App() {
         <Route path="/chat/:restaurantId?" element={<ChatWithAichmi />} />
         <Route path="/confirmation" element={<Confirmation />} />
         <Route path="/about" element={<About />} />
+        <Route path="/subscriptions" element={<Subscriptions />} />
       </Routes>
       <Footer />
     </Router>
