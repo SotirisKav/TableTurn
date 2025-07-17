@@ -1,4 +1,4 @@
-import pool from '../config/database.js';
+import db from '../config/database.js';
 
 function toISODate(dateString) {
   // Handles 'August 8, 2025' -> '2025-08-08'
@@ -6,6 +6,7 @@ function toISODate(dateString) {
   if (isNaN(d)) return null;
   return d.toISOString().slice(0, 10);
 }
+
 class RestaurantService {
     // Get all restaurants with their details
     static async getAllRestaurants() {
@@ -30,13 +31,13 @@ class RestaurantService {
                         ELSE '€€'
                     END as priceRange
                 FROM venue v
-                LEFT JOIN owner o ON v.venue_id = o.venue_id
+                LEFT JOIN owners o ON v.venue_id = o.venue_id
                 WHERE v.type = 'restaurant'
                 ORDER BY v.rating DESC;
             `;
             
-            const result = await pool.query(query);
-            return result.rows;
+            const result = await db.query(query);
+            return result;
         } catch (error) {
             console.error('Error fetching restaurants:', error);
             throw error;
@@ -60,19 +61,19 @@ class RestaurantService {
                     v.cuisine,
                     o.phone,
                     o.email as contact_email,
-                    o.name as owner_name,
+                    CONCAT(o.first_name, ' ', o.last_name) as owner_name,
                     CASE 
                         WHEN v.pricing = 'expensive' THEN '€€€€'
                         WHEN v.pricing = 'moderate' THEN '€€€'
                         ELSE '€€'
                     END as priceRange
                 FROM venue v
-                LEFT JOIN owner o ON v.venue_id = o.venue_id
+                LEFT JOIN owners o ON v.venue_id = o.venue_id
                 WHERE v.venue_id = $1 AND v.type = 'restaurant';
             `;
             
-            const result = await pool.query(query, [id]);
-            return result.rows[0] || null;
+            const result = await db.query(query, [id]);
+            return result[0] || null;
         } catch (error) {
             console.error('Error fetching restaurant by ID:', error);
             throw error;
@@ -80,8 +81,8 @@ class RestaurantService {
     }
 
     static async getRestaurantByName(name) {
-      const { rows } = await pool.query('SELECT * FROM venue WHERE name = $1', [name]);
-      return rows[0];
+        const result = await db.query('SELECT * FROM venue WHERE name = $1', [name]);
+        return result[0];
     }
 
     // Check if a restaurant is fully booked on a specific date
@@ -93,8 +94,8 @@ class RestaurantService {
                 WHERE venue_id = $1 AND fully_booked_date = $2;
             `;
             
-            const result = await pool.query(query, [venueId, date]);
-            return parseInt(result.rows[0].count) > 0;
+            const result = await db.query(query, [venueId, date]);
+            return parseInt(result[0].count) > 0;
         } catch (error) {
             console.error('Error checking fully booked status:', error);
             throw error;
@@ -110,8 +111,8 @@ class RestaurantService {
                 ORDER BY table_price ASC;
             `;
             
-            const result = await pool.query(query);
-            return result.rows;
+            const result = await db.query(query);
+            return result;
         } catch (error) {
             console.error('Error fetching table types:', error);
             throw error;
@@ -135,8 +136,8 @@ class RestaurantService {
                 WHERE venue_id = $1
                 ORDER BY category, price ASC;
             `;
-            const result = await pool.query(query, [venueId]);
-            return result.rows;
+            const result = await db.query(query, [venueId]);
+            return result;
         } catch (error) {
             console.error('Error fetching menu items:', error);
             throw error;
@@ -146,30 +147,30 @@ class RestaurantService {
     // Check if a table of a given type is available for a venue on a specific date
     static async isTableAvailable({ venueId, tableType, reservationDate }) {
         // 1. Get max tables for this type
-        const invRes = await pool.query(
+        const invRes = await db.query(
           'SELECT max_tables FROM table_inventory WHERE venue_id = $1 AND table_type = $2',
           [venueId, tableType]
         );
-        if (invRes.rowCount === 0) {
+        if (invRes.length === 0) {
           throw new Error('No inventory set for this table type at this venue.');
         }
-        const maxTables = invRes.rows[0].max_tables;
+        const maxTables = invRes[0].max_tables;
 
         // 2. Count existing reservations for this type
-        const resRes = await pool.query(
+        const resRes = await db.query(
           'SELECT COUNT(*) FROM reservation WHERE venue_id = $1 AND table_type = $2 AND reservation_date = $3',
           [venueId, tableType, reservationDate]
         );
-        const reservedCount = Number(resRes.rows[0].count);
+        const reservedCount = Number(resRes[0].count);
 
         // 3. For grass tables, subtract 2 for each special table booked
         let grassAdjustment = 0;
         if (tableType === 'grass') {
-          const specialRes = await pool.query(
+          const specialRes = await db.query(
             'SELECT COUNT(*) FROM reservation WHERE venue_id = $1 AND table_type = $2 AND reservation_date = $3',
             [venueId, 'special', reservationDate]
           );
-          grassAdjustment = Number(specialRes.rows[0].count) * 2;
+          grassAdjustment = Number(specialRes[0].count) * 2;
         }
 
         // 4. For special tables, ensure no more than 2 are booked
@@ -251,8 +252,8 @@ class RestaurantService {
         hotelId,
         venueId
       ];
-      const result = await pool.query(query, values);
-      return result.rows[0];
+      const result = await db.query(query, values);
+      return result[0];
     }
 }
 

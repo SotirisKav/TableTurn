@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import RestaurantService from './RestaurantService.js';
-import pool from '../config/database.js'; 
+import db from '../config/database.js'; 
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -15,93 +15,94 @@ async function fetchRelevantData(prompt, restaurantId = null) {
 
   try {
     const keywords = prompt.toLowerCase();
-    // Only try to infer restaurantId if it is not provided
+    
     if (!restaurantId) {
       const allRestaurants = await RestaurantService.getAllRestaurants();
       const found = allRestaurants.find(r =>
         keywords.includes(r.name.toLowerCase())
       );
       if (found) {
-        restaurantId = found.venue_id || found.id; // use your actual id field
+        restaurantId = found.venue_id || found.id;
         relevantData.restaurants.push(found);
 
-        // Fetch owner for this restaurant
         const ownerQuery = `
-          SELECT o.*, v.name as restaurant_name FROM owner o
+          SELECT o.*, v.name as restaurant_name FROM owners o
           JOIN venue v ON o.venue_id = v.venue_id
           WHERE v.venue_id = $1
         `;
-        const ownerResult = await pool.query(ownerQuery, [restaurantId]);
-        relevantData.owners = ownerResult.rows;
+        const ownerResult = await db.query(ownerQuery, [restaurantId]);
+        relevantData.owners = ownerResult; 
       }
     }
-    // --- RESTAURANT DATA ---
+
     if (restaurantId) {
-      // Fetch specific restaurant
       const restaurant = await RestaurantService.getRestaurantById(restaurantId);
-      // Only push if not already present, and always ensure it's the first in the array
       if (restaurant) {
         relevantData.restaurants = [restaurant];
       }
-      // Fetch owner for this restaurant
+
       const ownerQuery = `
-        SELECT o.*, v.name as restaurant_name FROM owner o
+        SELECT o.*, v.name as restaurant_name FROM owners o
         JOIN venue v ON o.venue_id = v.venue_id
         WHERE v.venue_id = $1
       `;
-      const ownerResult = await pool.query(ownerQuery, [restaurantId]);
-      relevantData.owners = ownerResult.rows;
+      const ownerResult = await db.query(ownerQuery, [restaurantId]);
+      relevantData.owners = ownerResult; 
 
-      // Fetch menu items for this restaurant if user asks about menu
-      if (
-        (keywords.includes('menu') || keywords.includes('dish') || keywords.includes('food'))
-      ) {
+      // Fetch menu items if user asks about menu
+      if (keywords.includes('menu') || keywords.includes('dish') || keywords.includes('food')) {
         relevantData.menuItems = await RestaurantService.getMenuItemsByVenueId(restaurantId);
       }
 
-      const tableTypesRes = await pool.query(
+      const tableTypesRes = await db.query(
         'SELECT table_type FROM table_inventory WHERE venue_id = $1 AND max_tables > 0',
         [restaurantId]
       );
-      relevantData.availableTableTypes = tableTypesRes.rows.map(row => row.table_type);
+      relevantData.availableTableTypes = tableTypesRes.map(row => row.table_type); 
     } else if (
-      keywords.includes('restaurant') ||
-      keywords.includes('menu') ||
-      keywords.includes('location') ||
-      keywords.includes('address')
+      keywords.includes('price') ||
+      keywords.includes('cost') ||
+      keywords.includes('table') ||
+      keywords.includes('fee')
     ) {
-      // Fetch all restaurants
-      relevantData.restaurants = await RestaurantService.getAllRestaurants();
-
-      // Fetch all owners for restaurants
-      const ownerQuery = `
-        SELECT o.*, v.name as restaurant_name FROM owner o
-        JOIN venue v ON o.venue_id = v.venue_id
-        WHERE v.type = 'restaurant'
-      `;
-      const ownerResult = await pool.query(ownerQuery);
-      relevantData.owners = ownerResult.rows;
+      const tableQuery = `SELECT * FROM tables ORDER BY table_price ASC`;
+      const tableResult = await db.query(tableQuery);
+      console.log('🔍 TABLE DATA FETCHED:', tableResult); // Add this debug line
+      relevantData.generalInfo.tables = tableResult; 
     }
 
-    // --- OWNER DATA (if user asks about owner/contact/phone/email, but no restaurantId) ---
+    // Add debugging for owner data too:
+    const ownerQuery = `
+      SELECT o.*, v.name as restaurant_name FROM owners o
+      JOIN venue v ON o.venue_id = v.venue_id
+      WHERE v.venue_id = $1
+    `;
+    const ownerResult = await db.query(ownerQuery, [restaurantId]);
+    console.log('🔍 OWNER DATA FETCHED:', ownerResult); // Add this debug line
+    relevantData.owners = ownerResult; 
+
+    // Add owner-related keywords check AND always fetch for restaurant questions
     if (
-      !restaurantId &&
-      (keywords.includes('owner') ||
-        keywords.includes('contact') ||
-        keywords.includes('phone') ||
-        keywords.includes('email'))
+      keywords.includes('owner') ||
+      keywords.includes('contact') ||
+      keywords.includes('phone') ||
+      keywords.includes('email') ||
+      keywords.includes('who') ||
+      keywords.includes('manager') ||
+      restaurantId // Always fetch owner data when we have a restaurant ID
     ) {
-      // Fetch all owners for restaurants
       const ownerQuery = `
-        SELECT o.*, v.name as restaurant_name FROM owner o
+        SELECT o.*, v.name as restaurant_name FROM owners o
         JOIN venue v ON o.venue_id = v.venue_id
-        WHERE v.type = 'restaurant'
+        WHERE ${restaurantId ? 'v.venue_id = $1' : 'v.type = \'restaurant\''}
       `;
-      const ownerResult = await pool.query(ownerQuery);
-      relevantData.owners = ownerResult.rows;
+      const ownerResult = restaurantId 
+        ? await db.query(ownerQuery, [restaurantId])
+        : await db.query(ownerQuery);
+      console.log('🔍 OWNER DATA FETCHED:', ownerResult); // Debug line
+      relevantData.owners = ownerResult; 
     }
 
-    // --- TABLES ---
     if (
       keywords.includes('price') ||
       keywords.includes('cost') ||
@@ -109,11 +110,10 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       keywords.includes('fee')
     ) {
       const tableQuery = `SELECT * FROM tables`;
-      const tableResult = await pool.query(tableQuery);
-      relevantData.generalInfo.tables = tableResult.rows;
+      const tableResult = await db.query(tableQuery);
+      relevantData.generalInfo.tables = tableResult; 
     }
 
-    // --- TRANSFERS ---
     if (
       keywords.includes('transfer') ||
       keywords.includes('transport') ||
@@ -121,11 +121,10 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       keywords.includes('pickup')
     ) {
       const transferQuery = `SELECT * FROM transfer_areas`;
-      const transferResult = await pool.query(transferQuery);
-      relevantData.generalInfo.transfers = transferResult.rows;
+      const transferResult = await db.query(transferQuery);
+      relevantData.generalInfo.transfers = transferResult;
     }
 
-    // --- AVAILABILITY/BOOKING DATES ---
     if (
       keywords.includes('available') ||
       keywords.includes('book') ||
@@ -134,9 +133,9 @@ async function fetchRelevantData(prompt, restaurantId = null) {
     ) {
       const bookedDatesQuery = `SELECT * FROM fully_booked_dates WHERE venue_id = $1 OR venue_id IS NULL`;
       const bookedResult = restaurantId
-        ? await pool.query(bookedDatesQuery, [restaurantId])
-        : await pool.query(`SELECT * FROM fully_booked_dates`);
-      relevantData.generalInfo.bookedDates = bookedResult.rows;
+        ? await db.query(bookedDatesQuery, [restaurantId])
+        : await db.query(`SELECT * FROM fully_booked_dates`);
+      relevantData.generalInfo.bookedDates = bookedResult; 
     }
   } catch (error) {
     console.error('Error fetching relevant data:', error);
@@ -165,7 +164,10 @@ function formatDataForPrompt(data) {
   if (data.owners.length > 0) {
     contextInfo += "\n**RESTAURANT OWNERS/CONTACTS:**\n";
     data.owners.forEach(owner => {
-      contextInfo += `- **${owner.restaurant_name}**: Owner is ${owner.name}\n`;
+      const ownerName = owner.first_name && owner.last_name 
+        ? `${owner.first_name} ${owner.last_name}` 
+        : (owner.name || 'Owner');
+      contextInfo += `- **${owner.restaurant_name}**: Owner is ${ownerName}\n`;
       contextInfo += `  - Email: ${owner.email}\n`;
       contextInfo += `  - Phone: ${owner.phone}\n\n`;
     });

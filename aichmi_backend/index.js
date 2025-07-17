@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import RestaurantService from './services/RestaurantService.js';
 import chatRouter from './routes/chat.js';
 import reservationRouter from './routes/reservation.js';
+import authRouter from './routes/auth.js';
+import restaurantSetupRouter from './routes/restaurantSetup.js';
 
 dotenv.config();
 
@@ -28,18 +30,32 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '../views'));
 
 // API Routes
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV 
+  });
+});
+
 app.get('/api/restaurants', async (req, res) => {
   try {
+    console.log('Fetching restaurants...');
     const restaurants = await RestaurantService.getAllRestaurants();
+    console.log('Restaurants fetched:', restaurants.length);
     res.json(restaurants);
   } catch (error) {
     console.error('Error fetching restaurants:', error);
-    res.status(500).json({ error: 'Failed to fetch restaurants' });
+    res.status(500).json({ 
+      error: 'Failed to fetch restaurants',
+      details: error.message 
+    });
   }
 });
 
 app.get('/api/restaurants/:id', async (req, res) => {
   try {
+    console.log('Fetching restaurant with ID:', req.params.id);
     const restaurant = await RestaurantService.getRestaurantById(req.params.id);
     if (restaurant) {
       res.json(restaurant);
@@ -48,12 +64,21 @@ app.get('/api/restaurants/:id', async (req, res) => {
     }
   } catch (error) {
     console.error('Error fetching restaurant:', error);
-    res.status(500).json({ error: 'Failed to fetch restaurant' });
+    res.status(500).json({ 
+      error: 'Failed to fetch restaurant',
+      details: error.message 
+    });
   }
 });
 
+// Authentication Routes
+app.use('/api/auth', authRouter);
+
 // Chat/AI Route
 app.use('/api/chat', chatRouter);
+
+// Restaurant Setup Route (NEW)
+app.use('/api/chat', restaurantSetupRouter);
 
 // Reservation Route
 app.use('/api/reservation', reservationRouter);
@@ -75,5 +100,6 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 AICHMI App running on http://localhost:${PORT}`);
   console.log(`🌐 API endpoints available at http://localhost:${PORT}/api`);
+  console.log(`🔐 Authentication endpoints at http://localhost:${PORT}/api/auth`);
   console.log(`📱 Frontend served from the same domain - it's one unified app!`);
 });

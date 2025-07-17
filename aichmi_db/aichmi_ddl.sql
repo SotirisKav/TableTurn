@@ -1,6 +1,9 @@
 DROP DATABASE IF EXISTS aichmi;
 CREATE DATABASE aichmi;
 
+-- Connect to the new database
+\c aichmi
+
 DROP TABLE IF EXISTS response_templates CASCADE;
 DROP TABLE IF EXISTS fully_booked_dates CASCADE;
 DROP TABLE IF EXISTS wedding_dates CASCADE;
@@ -8,13 +11,17 @@ DROP TABLE IF EXISTS reservation CASCADE;
 DROP TABLE IF EXISTS tables CASCADE;
 DROP TABLE IF EXISTS hotel CASCADE;
 DROP TABLE IF EXISTS transfer_areas CASCADE;
-DROP TABLE IF EXISTS owner CASCADE;
+DROP TABLE IF EXISTS refresh_tokens CASCADE;
+DROP TABLE IF EXISTS owners CASCADE;
 DROP TABLE IF EXISTS venue CASCADE;
 DROP TABLE IF EXISTS bot_modules CASCADE;
 DROP TABLE IF EXISTS bot_config CASCADE;
 DROP TABLE IF EXISTS menu_item CASCADE;
 DROP TABLE IF EXISTS table_inventory CASCADE;
 
+-- Create ENUM types for PostgreSQL
+CREATE TYPE subscription_status_enum AS ENUM ('active', 'canceled', 'past_due', 'unpaid');
+CREATE TYPE oauth_provider_enum AS ENUM ('google', 'facebook', 'local');
 
 CREATE TABLE venue (
     venue_id SERIAL PRIMARY KEY,
@@ -29,13 +36,44 @@ CREATE TABLE venue (
     cuisine VARCHAR(100)
 );
 
-CREATE TABLE owner (
-    owner_id SERIAL PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,
-    email VARCHAR(100) NOT NULL UNIQUE,
+CREATE TABLE owners (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255), -- nullable for OAuth users
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
-    venue_id INT NOT NULL,
-    FOREIGN KEY (venue_id) REFERENCES venue(venue_id) ON DELETE CASCADE
+    venue_id INT,
+    stripe_customer_id VARCHAR(255),
+    stripe_subscription_id VARCHAR(255),
+    subscription_status subscription_status_enum DEFAULT NULL,
+    oauth_provider oauth_provider_enum DEFAULT 'local',
+    oauth_id VARCHAR(255),
+    email_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (venue_id) REFERENCES venue(venue_id)
+);
+
+-- Create a trigger to update the updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = CURRENT_TIMESTAMP;
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_owners_updated_at BEFORE UPDATE ON owners
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE refresh_tokens (
+    id SERIAL PRIMARY KEY,
+    token VARCHAR(500) NOT NULL,
+    owner_id INT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE
 );
 
 CREATE TABLE transfer_areas (
@@ -140,3 +178,10 @@ CREATE TABLE bot_modules (
     venue_id INT NOT NULL,
     FOREIGN KEY (venue_id) REFERENCES venue(venue_id) ON DELETE CASCADE
 );
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_owners_email ON owners(email);
+CREATE INDEX IF NOT EXISTS idx_owners_stripe_customer ON owners(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_owner ON refresh_tokens(owner_id);
+CREATE INDEX IF NOT EXISTS idx_reservation_venue ON reservation(venue_id);
+CREATE INDEX IF NOT EXISTS idx_reservation_date ON reservation(reservation_date);

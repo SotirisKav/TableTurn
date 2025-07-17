@@ -3,40 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import ScrollFloat from './ScrollFloat';
-import ScrollDescription from './ScrollDescription'; // Add this import
+import ScrollDescription from './ScrollDescription';
 
 gsap.registerPlugin(ScrollTrigger);
 
 function Subscriptions() {
   const navigate = useNavigate();
-  const [isSelected, setIsSelected] = useState(false);
   const scrollContainerRef = useRef(null);
 
   useEffect(() => {
     ScrollTrigger.refresh();
   }, []);
 
-  const plan = {
-    id: 'professional',
-    name: 'Professional',
-    price: '79',
+  const standardPlan = {
+    id: 'standard',
+    name: 'Standard Plan',
+    price: '29',
     period: 'month',
     features: [
-      'Advanced AI with custom responses',
-      'Unlimited bookings',
-      'Priority support',
-      'Advanced analytics & insights',
-      'Custom branding options',
-      'Multi-language support',
-      'Integration with existing systems',
-      'Mobile-friendly booking pages',
-      'Real-time availability updates'
+      'AI Reservation Assistant',
+      'Menu Integration',
+      'Table Management',
+      'Email & SMS Notifications',
+      'Basic Analytics',
+      '24/7 Support'
     ]
   };
 
-  const handlePlanSelect = () => {
-    setIsSelected(true);
-    alert(`You selected the ${plan.name} plan for €${plan.price}/${plan.period}. Payment integration coming soon!`);
+  const handleSelectPlan = (planType) => {
+    // Store selected plan in localStorage for the signup process
+    localStorage.setItem('selectedPlan', planType);
+    
+    // Redirect to restaurant setup page
+    navigate('/restaurant-setup');
   };
 
   const benefits = [
@@ -91,22 +90,23 @@ function Subscriptions() {
 
         <div className="pricing-section">
           <h2 className="pricing-title">Choose Your Plan</h2>
-          <p className="pricing-subtitle">Start your digital transformation today</p>
+          <p className="pricing-subtitle">Start your AI-powered restaurant assistant journey</p>
           
           <div className="single-plan-container">
-            <div className={`pricing-card single ${isSelected ? 'selected' : ''}`}>
+            <div className="pricing-card single-plan featured">
               <div className="popular-badge">Most Popular</div>
               
               <div className="plan-header">
-                <h3 className="plan-name">{plan.name}</h3>
+                <h3 className="plan-name">{standardPlan.name}</h3>
                 <div className="plan-price">
-                  <span className="price-amount">€{plan.price}</span>
-                  <span className="price-period">/{plan.period}</span>
+                  <span className="price-currency">€</span>
+                  <span className="price-amount">{standardPlan.price}</span>
+                  <span className="price-period">/{standardPlan.period}</span>
                 </div>
               </div>
               
               <ul className="plan-features">
-                {plan.features.map((feature, index) => (
+                {standardPlan.features.map((feature, index) => (
                   <li key={index} className="feature-item">
                     <span className="feature-check">✓</span>
                     {feature}
@@ -116,7 +116,7 @@ function Subscriptions() {
               
               <button 
                 className="cta-button primary plan-button"
-                onClick={handlePlanSelect}
+                onClick={() => handleSelectPlan('standard')}
               >
                 Get Started
               </button>
@@ -125,34 +125,34 @@ function Subscriptions() {
         </div>
 
         <div className="subscriptions-benefits">
-        <h2 className="benefits-title">Why Choose AICHMI?</h2>
+          <h2 className="benefits-title">Why Choose AICHMI?</h2>
 
-        <div className="benefits-content">
-          {benefits.map((benefit, index) => (
-            <div key={index} className="benefit-block">
-              <ScrollFloat
-                scrollContainerRef={scrollContainerRef}
-                containerClassName="benefit-title-container"
-                textClassName="benefit-title-text"
-                animationDuration={1.2}
-                ease="back.out(1.7)"
-                scrollStart="top bottom-=150px"
-                scrollEnd="center center-=50px"
-                stagger={0.03}
-              >
-                {benefit.title}
-              </ScrollFloat>
-              <ScrollDescription
-                scrollContainerRef={scrollContainerRef}
-                containerClassName="benefit-description-container"
-                textClassName="benefit-description-text"
-                animationDuration={2}
-                ease="power2.out"
-                scrollStart="center center+=100px"
-                scrollEnd="bottom center+=200px"
-                stagger={0.015}
-              >
-                {benefit.description}
+          <div className="benefits-content">
+            {benefits.map((benefit, index) => (
+              <div key={index} className="benefit-block">
+                <ScrollFloat
+                  scrollContainerRef={scrollContainerRef}
+                  containerClassName="benefit-title-container"
+                  textClassName="benefit-title-text"
+                  animationDuration={1.2}
+                  ease="back.out(1.7)"
+                  scrollStart="top bottom-=150px"
+                  scrollEnd="center center-=50px"
+                  stagger={0.03}
+                >
+                  {benefit.title}
+                </ScrollFloat>
+                <ScrollDescription
+                  scrollContainerRef={scrollContainerRef}
+                  containerClassName="benefit-description-container"
+                  textClassName="benefit-description-text"
+                  animationDuration={2}
+                  ease="power2.out"
+                  scrollStart="center center+=100px"
+                  scrollEnd="bottom center+=200px"
+                  stagger={0.015}
+                >
+                  {benefit.description}
                 </ScrollDescription>
               </div>
             ))}

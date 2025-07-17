@@ -10,6 +10,9 @@ import Reservation from './components/Reservation';
 import ChatWithAichmi from './components/ChatWithAichmi';
 import Confirmation from './components/Confirmation';
 import Subscriptions from './components/Subscriptions';
+import Login from './components/Login';
+import Dashboard from './components/Dashboard';
+import RestaurantSetup from './components/RestaurantSetup';
 import './App.css';
 
 function App() {
@@ -22,7 +25,6 @@ function App() {
             <HeroSection />
             <MainContent />
             <DoBusiness />
-            {/* Removed About section from home page */}
           </>
         } />
         <Route path="/browse-restaurants" element={<BrowseRestaurants />} />
@@ -32,6 +34,9 @@ function App() {
         <Route path="/confirmation" element={<Confirmation />} />
         <Route path="/about" element={<About />} />
         <Route path="/subscriptions" element={<Subscriptions />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/restaurant-setup" element={<RestaurantSetup />} />
       </Routes>
       <Footer />
     </Router>
