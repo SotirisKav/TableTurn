@@ -5,8 +5,7 @@ function RestaurantSetup() {
     const [messages, setMessages] = useState([]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [setupStep, setSetupStep] = useState('welcome');
-    const [restaurantData, setRestaurantData] = useState({});
+    const [collectedData, setCollectedData] = useState({});
     const navigate = useNavigate();
     const messagesEndRef = useRef(null);
 
@@ -44,23 +43,44 @@ function RestaurantSetup() {
             timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, userMessage]);
+        // Build conversation history INCLUDING the new user message
+        const conversationHistory = [...messages, userMessage];
+        
+        // Update UI immediately
+        setMessages(conversationHistory);
         setIsLoading(true);
         
+        // CRITICAL DEBUG: Log what we're about to send
+        console.log('🚀 About to send to API:');
+        console.log('- Message:', inputMessage);
+        console.log('- Current messages length:', messages.length);
+        console.log('- Conversation history length:', conversationHistory.length);
+        console.log('- Conversation history:', conversationHistory);
+        console.log('- Collected data:', collectedData);
+        
+        const requestPayload = {
+            message: inputMessage,
+            history: conversationHistory,
+            collectedData: collectedData
+        };
+        
+        console.log('📤 Full request payload:', JSON.stringify(requestPayload, null, 2));
+        
         try {
-            const response = await fetch('/api/chat/restaurant-setup', {
+            const response = await fetch('/api/restaurant-setup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    message: inputMessage,
-                    setupStep: setupStep,
-                    restaurantData: restaurantData
-                })
+                body: JSON.stringify(requestPayload)
             });
 
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
+            console.log('📨 API Response received:', data);
 
             if (data.reply) {
                 const aiMessage = {
@@ -68,25 +88,33 @@ function RestaurantSetup() {
                     sender: 'ai',
                     timestamp: new Date()
                 };
-                setMessages(prev => [...prev, aiMessage]);
+                
+                // Update messages with AI response
+                setMessages(prev => {
+                    const newMessages = [...prev, aiMessage];
+                    console.log('📝 Updated messages array:', newMessages);
+                    return newMessages;
+                });
 
-                // Update setup progress
-                if (data.nextStep) {
-                    setSetupStep(data.nextStep);
-                }
-                if (data.restaurantData) {
-                    setRestaurantData(prev => ({ ...prev, ...data.restaurantData }));
+                // Update collected data
+                if (data.collectedData) {
+                    setCollectedData(data.collectedData);
+                    console.log('📊 Updated collected data:', data.collectedData);
                 }
 
                 // If setup is complete, redirect to dashboard
                 if (data.setupComplete) {
+                    if (data.restaurantData) {
+                        localStorage.setItem('restaurantData', JSON.stringify(data.restaurantData));
+                    }
+                    
                     setTimeout(() => {
                         navigate('/dashboard');
                     }, 2000);
                 }
             }
         } catch (error) {
-            console.error('Error sending message:', error);
+            console.error('❌ Error sending message:', error);
             const errorMessage = {
                 text: 'Sorry, I had trouble processing that. Could you please try again?',
                 sender: 'ai',
@@ -106,6 +134,24 @@ function RestaurantSetup() {
         }
     };
 
+    const getProgressPercentage = () => {
+        const totalFields = 11;
+        const collectedFields = Object.keys(collectedData).length;
+        return Math.round((collectedFields / totalFields) * 100);
+    };
+
+    const getProgressText = () => {
+        const collectedFields = Object.keys(collectedData).length;
+        const totalFields = 11;
+        
+        if (collectedFields === 0) return 'Getting Started';
+        if (collectedFields < 3) return 'Restaurant Basic Info';
+        if (collectedFields < 6) return 'Location & Contact';
+        if (collectedFields < 9) return 'Restaurant Details';
+        if (collectedFields < 11) return 'Owner Information';
+        return 'Setup Complete!';
+    };
+
     return (
         <div className="restaurant-setup-page">
             <div className="setup-container">
@@ -116,10 +162,20 @@ function RestaurantSetup() {
                         <div className="progress-bar">
                             <div 
                                 className="progress-fill" 
-                                style={{ width: `${getProgressPercentage(setupStep)}%` }}
+                                style={{ width: `${getProgressPercentage()}%` }}
                             ></div>
                         </div>
-                        <span className="progress-text">{getProgressText(setupStep)}</span>
+                        <span className="progress-text">
+                            {getProgressText()} ({Object.keys(collectedData).length}/11)
+                        </span>
+                    </div>
+                    
+                    {/* DEBUG: Show collected data and message count */}
+                    <div style={{ fontSize: '12px', marginTop: '10px', opacity: 0.7 }}>
+                        Messages: {messages.length} | 
+                        Collected: {Object.keys(collectedData).length > 0 ? 
+                            Object.keys(collectedData).join(', ') : 
+                            'None yet'}
                     </div>
                 </div>
 
@@ -184,39 +240,6 @@ function RestaurantSetup() {
             </div>
         </div>
     );
-}
-
-// Helper functions for progress tracking
-function getProgressPercentage(step) {
-    const steps = {
-        'welcome': 10,
-        'restaurant_name': 20,
-        'restaurant_type': 30,
-        'location': 40,
-        'contact_info': 50,
-        'cuisine': 60,
-        'pricing': 70,
-        'description': 80,
-        'owner_info': 90,
-        'complete': 100
-    };
-    return steps[step] || 10;
-}
-
-function getProgressText(step) {
-    const texts = {
-        'welcome': 'Getting Started',
-        'restaurant_name': 'Restaurant Name',
-        'restaurant_type': 'Restaurant Type',
-        'location': 'Location Details',
-        'contact_info': 'Contact Information',
-        'cuisine': 'Cuisine Type',
-        'pricing': 'Pricing Information',
-        'description': 'Restaurant Description',
-        'owner_info': 'Owner Information',
-        'complete': 'Setup Complete!'
-    };
-    return texts[step] || 'Getting Started';
 }
 
 export default RestaurantSetup;

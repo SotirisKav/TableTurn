@@ -78,7 +78,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/chat', chatRouter);
 
 // Restaurant Setup Route (NEW)
-app.use('/api/chat', restaurantSetupRouter);
+app.use('/api', restaurantSetupRouter);
 
 // Reservation Route
 app.use('/api/reservation', reservationRouter);
