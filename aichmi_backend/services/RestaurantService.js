@@ -255,6 +255,251 @@ class RestaurantService {
       const result = await db.query(query, values);
       return result[0];
     }
+
+    // NEW: Create restaurant with Google Maps location data
+    static async createRestaurantWithLocation(restaurantData) {
+        try {
+            const query = `
+                INSERT INTO venue (
+                    name, address, area, island, type, rating, pricing, 
+                    image_url, google_place_id, description, cuisine
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                RETURNING venue_id, name, address, area, island, type, rating, pricing, 
+                         image_url, google_place_id, description, cuisine
+            `;
+
+            const values = [
+                restaurantData.name,
+                restaurantData.address,
+                restaurantData.area,
+                restaurantData.island,
+                'restaurant', // type is always restaurant
+                restaurantData.rating || null,
+                restaurantData.pricing,
+                restaurantData.image_url || null,
+                restaurantData.google_place_id,
+                restaurantData.description,
+                restaurantData.cuisine
+            ];
+
+            const result = await db.query(query, values);
+            return result[0];
+
+        } catch (error) {
+            console.error('Error creating restaurant with location:', error);
+            throw error;
+        }
+    }
+
+    // NEW: Get restaurants by island
+    static async getRestaurantsByIsland(island) {
+        try {
+            const query = `
+                SELECT 
+                    v.venue_id as id,
+                    v.name,
+                    v.address,
+                    v.area as location,
+                    v.island,
+                    v.type,
+                    v.rating,
+                    v.pricing as price_range,
+                    v.image_url as image,
+                    v.description,
+                    v.cuisine,
+                    v.google_place_id,
+                    o.phone,
+                    o.email as contact_email,
+                    CASE 
+                        WHEN v.pricing = 'expensive' THEN '€€€€'
+                        WHEN v.pricing = 'moderate' THEN '€€€'
+                        ELSE '€€'
+                    END as priceRange
+                FROM venue v
+                LEFT JOIN owners o ON v.venue_id = o.venue_id
+                WHERE v.type = 'restaurant' AND v.island ILIKE $1
+                ORDER BY v.rating DESC
+            `;
+
+            const result = await db.query(query, [`%${island}%`]);
+            return result;
+
+        } catch (error) {
+            console.error('Error getting restaurants by island:', error);
+            throw error;
+        }
+    }
+
+    // NEW: Get restaurants by area within an island
+    static async getRestaurantsByArea(island, area) {
+        try {
+            const query = `
+                SELECT 
+                    v.venue_id as id,
+                    v.name,
+                    v.address,
+                    v.area as location,
+                    v.island,
+                    v.type,
+                    v.rating,
+                    v.pricing as price_range,
+                    v.image_url as image,
+                    v.description,
+                    v.cuisine,
+                    v.google_place_id,
+                    o.phone,
+                    o.email as contact_email,
+                    CASE 
+                        WHEN v.pricing = 'expensive' THEN '€€€€'
+                        WHEN v.pricing = 'moderate' THEN '€€€'
+                        ELSE '€€'
+                    END as priceRange
+                FROM venue v
+                LEFT JOIN owners o ON v.venue_id = o.venue_id
+                WHERE v.type = 'restaurant' AND v.island ILIKE $1 AND v.area ILIKE $2
+                ORDER BY v.rating DESC
+            `;
+
+            const result = await db.query(query, [`%${island}%`, `%${area}%`]);
+            return result;
+
+        } catch (error) {
+            console.error('Error getting restaurants by area:', error);
+            throw error;
+        }
+    }
+
+    // NEW: Update restaurant location
+    static async updateRestaurantLocation(venueId, locationData) {
+        try {
+            const query = `
+                UPDATE venue 
+                SET address = $2, area = $3, island = $4, google_place_id = $5
+                WHERE venue_id = $1 AND type = 'restaurant'
+                RETURNING venue_id, name, address, area, island, google_place_id
+            `;
+
+            const values = [
+                venueId,
+                locationData.address,
+                locationData.area,
+                locationData.island,
+                locationData.google_place_id
+            ];
+
+            const result = await db.query(query, values);
+            return result[0];
+
+        } catch (error) {
+            console.error('Error updating restaurant location:', error);
+            throw error;
+        }
+    }
+
+    // NEW: Search restaurants with filters including location
+    static async searchRestaurantsWithFilters(filters = {}) {
+        try {
+            let query = `
+                SELECT 
+                    v.venue_id as id,
+                    v.name,
+                    v.address,
+                    v.area as location,
+                    v.island,
+                    v.type,
+                    v.rating,
+                    v.pricing as price_range,
+                    v.image_url as image,
+                    v.description,
+                    v.cuisine,
+                    v.google_place_id,
+                    o.phone,
+                    o.email as contact_email,
+                    CASE 
+                        WHEN v.pricing = 'expensive' THEN '€€€€'
+                        WHEN v.pricing = 'moderate' THEN '€€€'
+                        ELSE '€€'
+                    END as priceRange
+                FROM venue v
+                LEFT JOIN owners o ON v.venue_id = o.venue_id
+                WHERE v.type = 'restaurant'
+            `;
+
+            const values = [];
+            let paramCount = 1;
+
+            if (filters.island) {
+                query += ` AND v.island ILIKE $${paramCount}`;
+                values.push(`%${filters.island}%`);
+                paramCount++;
+            }
+
+            if (filters.area) {
+                query += ` AND v.area ILIKE $${paramCount}`;
+                values.push(`%${filters.area}%`);
+                paramCount++;
+            }
+
+            if (filters.pricing) {
+                query += ` AND v.pricing = $${paramCount}`;
+                values.push(filters.pricing);
+                paramCount++;
+            }
+
+            if (filters.cuisine) {
+                query += ` AND v.cuisine ILIKE $${paramCount}`;
+                values.push(`%${filters.cuisine}%`);
+                paramCount++;
+            }
+
+            if (filters.minRating) {
+                query += ` AND v.rating >= $${paramCount}`;
+                values.push(filters.minRating);
+                paramCount++;
+            }
+
+            if (filters.searchTerm) {
+                query += ` AND (v.name ILIKE $${paramCount} OR v.cuisine ILIKE $${paramCount} OR v.description ILIKE $${paramCount})`;
+                values.push(`%${filters.searchTerm}%`);
+                paramCount++;
+            }
+
+            query += ` ORDER BY v.rating DESC`;
+
+            const result = await db.query(query, values);
+            return result;
+
+        } catch (error) {
+            console.error('Error searching restaurants with filters:', error);
+            throw error;
+        }
+    }
+
+    // NEW: Get restaurant statistics by island
+    static async getRestaurantStatsByIsland() {
+        try {
+            const query = `
+                SELECT 
+                    v.island,
+                    COUNT(*) as restaurant_count,
+                    AVG(v.rating) as avg_rating,
+                    COUNT(CASE WHEN v.pricing = 'affordable' THEN 1 END) as affordable_count,
+                    COUNT(CASE WHEN v.pricing = 'moderate' THEN 1 END) as moderate_count,
+                    COUNT(CASE WHEN v.pricing = 'expensive' THEN 1 END) as expensive_count
+                FROM venue v
+                WHERE v.type = 'restaurant'
+                GROUP BY v.island
+                ORDER BY restaurant_count DESC
+            `;
+
+            const result = await db.query(query);
+            return result;
+
+        } catch (error) {
+            console.error('Error getting restaurant stats:', error);
+            throw error;
+        }
+    }
 }
 
 export default RestaurantService;

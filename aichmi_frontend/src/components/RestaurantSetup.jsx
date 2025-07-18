@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LocationPicker from './LocationPicker';
 
 function RestaurantSetup() {
     const [messages, setMessages] = useState([]);
@@ -8,14 +9,26 @@ function RestaurantSetup() {
     const [collectedData, setCollectedData] = useState({});
     const navigate = useNavigate();
     const messagesEndRef = useRef(null);
+    const chatContainerRef = useRef(null);
 
+    // Improved scroll function - less aggressive
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (messagesEndRef.current && chatContainerRef.current) {
+            // Use a smoother scroll with a slight delay
+            setTimeout(() => {
+                messagesEndRef.current?.scrollIntoView({ 
+                    behavior: "smooth", 
+                    block: "end",
+                    inline: "nearest"
+                });
+            }, 100);
+        }
     };
 
+    // Only scroll when new messages are added, not on every render
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [messages.length]); // Changed from [messages] to [messages.length]
 
     useEffect(() => {
         // Check if user came from plan selection
@@ -34,37 +47,28 @@ function RestaurantSetup() {
         setMessages([welcomeMessage]);
     }, [navigate]);
 
-    const handleSendMessage = async () => {
-        if (!inputMessage.trim()) return;
-
+    // Fixed location handler
+    const handleLocationSelect = async (locationData) => {
+        console.log('📍 Location selected:', locationData);
+        
+        const locationMessage = `location_selected: ${JSON.stringify({
+            lat: locationData.lat,
+            lng: locationData.lng,
+            island: locationData.island,
+            area: locationData.area,
+            address: locationData.address,
+            placeId: locationData.placeId
+        })}`;
+        
         const userMessage = {
-            text: inputMessage,
+            text: locationMessage,
             sender: 'user',
             timestamp: new Date()
         };
 
-        // Build conversation history INCLUDING the new user message
         const conversationHistory = [...messages, userMessage];
-        
-        // Update UI immediately
         setMessages(conversationHistory);
         setIsLoading(true);
-        
-        // CRITICAL DEBUG: Log what we're about to send
-        console.log('🚀 About to send to API:');
-        console.log('- Message:', inputMessage);
-        console.log('- Current messages length:', messages.length);
-        console.log('- Conversation history length:', conversationHistory.length);
-        console.log('- Conversation history:', conversationHistory);
-        console.log('- Collected data:', collectedData);
-        
-        const requestPayload = {
-            message: inputMessage,
-            history: conversationHistory,
-            collectedData: collectedData
-        };
-        
-        console.log('📤 Full request payload:', JSON.stringify(requestPayload, null, 2));
         
         try {
             const response = await fetch('/api/restaurant-setup', {
@@ -72,7 +76,11 @@ function RestaurantSetup() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(requestPayload)
+                body: JSON.stringify({
+                    message: locationMessage,
+                    history: conversationHistory,
+                    collectedData: collectedData
+                })
             });
 
             if (!response.ok) {
@@ -80,7 +88,79 @@ function RestaurantSetup() {
             }
 
             const data = await response.json();
-            console.log('📨 API Response received:', data);
+            
+            if (data.reply) {
+                const aiMessage = {
+                    text: data.reply,
+                    sender: 'ai',
+                    timestamp: new Date()
+                };
+                
+                setMessages(prev => [...prev, aiMessage]);
+                
+                if (data.collectedData) {
+                    setCollectedData(data.collectedData);
+                }
+                
+                if (data.setupComplete) {
+                    if (data.restaurantData) {
+                        localStorage.setItem('restaurantData', JSON.stringify(data.restaurantData));
+                    }
+                    setTimeout(() => {
+                        navigate('/dashboard');
+                    }, 2000);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error sending location:', error);
+            const errorMessage = {
+                text: 'Sorry, I had trouble processing that location. Could you please try again?',
+                sender: 'ai',
+                timestamp: new Date()
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSendMessage = async () => {
+        if (!inputMessage.trim() || isLoading) return;
+
+        const userMessage = {
+            text: inputMessage,
+            sender: 'user',
+            timestamp: new Date()
+        };
+
+        const conversationHistory = [...messages, userMessage];
+        
+        // Clear input immediately for better UX
+        const messageToSend = inputMessage;
+        setInputMessage('');
+        setMessages(conversationHistory);
+        setIsLoading(true);
+        
+        console.log('🚀 Sending message:', messageToSend);
+        
+        try {
+            const response = await fetch('/api/restaurant-setup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: messageToSend,
+                    history: conversationHistory,
+                    collectedData: collectedData
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
 
             if (data.reply) {
                 const aiMessage = {
@@ -89,25 +169,16 @@ function RestaurantSetup() {
                     timestamp: new Date()
                 };
                 
-                // Update messages with AI response
-                setMessages(prev => {
-                    const newMessages = [...prev, aiMessage];
-                    console.log('📝 Updated messages array:', newMessages);
-                    return newMessages;
-                });
+                setMessages(prev => [...prev, aiMessage]);
 
-                // Update collected data
                 if (data.collectedData) {
                     setCollectedData(data.collectedData);
-                    console.log('📊 Updated collected data:', data.collectedData);
                 }
 
-                // If setup is complete, redirect to dashboard
                 if (data.setupComplete) {
                     if (data.restaurantData) {
                         localStorage.setItem('restaurantData', JSON.stringify(data.restaurantData));
                     }
-                    
                     setTimeout(() => {
                         navigate('/dashboard');
                     }, 2000);
@@ -123,7 +194,6 @@ function RestaurantSetup() {
             setMessages(prev => [...prev, errorMessage]);
         } finally {
             setIsLoading(false);
-            setInputMessage('');
         }
     };
 
@@ -152,6 +222,53 @@ function RestaurantSetup() {
         return 'Setup Complete!';
     };
 
+    // Make sure your message rendering handles the map correctly
+    const renderMessageText = (message) => {
+      if (message.text.includes('[SHOW_MAP]')) {
+        const parts = message.text.split('[SHOW_MAP]');
+        return (
+          <div className="message-with-map">
+            {parts[0] && (
+              <div className="message-text-before">
+                {parts[0].trim().split('\n').map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < parts[0].trim().split('\n').length - 1 && <br />}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="map-container">
+              <LocationPicker onLocationSelect={handleLocationSelect} />
+            </div>
+
+            {parts[1] && (
+              <div className="message-text-after">
+                {parts[1].trim().split('\n').map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    {i < parts[1].trim().split('\n').length - 1 && <br />}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      } else {
+        return (
+          <div className="message-text">
+            {message.text.split('\n').map((line, i) => (
+              <span key={i}>
+                {line}
+                {i < message.text.split('\n').length - 1 && <br />}
+              </span>
+            ))}
+          </div>
+        );
+      }
+    };
+
     return (
         <div className="restaurant-setup-page">
             <div className="setup-container">
@@ -169,31 +286,18 @@ function RestaurantSetup() {
                             {getProgressText()} ({Object.keys(collectedData).length}/11)
                         </span>
                     </div>
-                    
-                    {/* DEBUG: Show collected data and message count */}
-                    <div style={{ fontSize: '12px', marginTop: '10px', opacity: 0.7 }}>
-                        Messages: {messages.length} | 
-                        Collected: {Object.keys(collectedData).length > 0 ? 
-                            Object.keys(collectedData).join(', ') : 
-                            'None yet'}
-                    </div>
                 </div>
 
                 <div className="setup-chat-container">
-                    <div className="chat-messages">
+                    <div className="chat-messages" ref={chatContainerRef}>
                         {messages.map((message, index) => (
                             <div key={index} className={`message ${message.sender}`}>
                                 <div className="message-content">
-                                    <div className="message-text">
-                                        {message.text.split('\n').map((line, i) => (
-                                            <span key={i}>
-                                                {line}
-                                                {i < message.text.split('\n').length - 1 && <br />}
-                                            </span>
-                                        ))}
-                                    </div>
+                                    {renderMessageText(message)}
                                     <div className="message-time">
-                                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {new Date(message.timestamp).toLocaleTimeString([], 
+                                            { hour: '2-digit', minute: '2-digit' }
+                                        )}
                                     </div>
                                 </div>
                             </div>

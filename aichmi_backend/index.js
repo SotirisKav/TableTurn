@@ -7,6 +7,7 @@ import chatRouter from './routes/chat.js';
 import reservationRouter from './routes/reservation.js';
 import authRouter from './routes/auth.js';
 import restaurantSetupRouter from './routes/restaurantSetup.js';
+import locationRoutes from './routes/location.js';
 
 dotenv.config();
 
@@ -82,6 +83,9 @@ app.use('/api', restaurantSetupRouter);
 
 // Reservation Route
 app.use('/api/reservation', reservationRouter);
+
+// Location Route
+app.use('/api/location', locationRoutes);
 
 // Legacy EJS route (for backward compatibility)
 app.get('/legacy', (req, res) => {

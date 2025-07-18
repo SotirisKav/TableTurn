@@ -27,14 +27,19 @@ CREATE TABLE venue (
     venue_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     address VARCHAR(255) NOT NULL,
-    area VARCHAR(50) NOT NULL,
+    area VARCHAR(100) NOT NULL,
+    island VARCHAR(100) NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('restaurant', 'hotel')),
     rating NUMERIC(2,1) CHECK (rating >= 1 AND rating <= 5),
     pricing TEXT NOT NULL CHECK (pricing IN ('affordable', 'moderate', 'expensive')),
     image_url VARCHAR(500),
+    google_place_id VARCHAR(255) NOT NULL,
     description TEXT,
     cuisine VARCHAR(100)
 );
+CREATE INDEX IF NOT EXISTS idx_venue_island ON venue(island);
+CREATE INDEX IF NOT EXISTS idx_venue_area ON venue(area);
+CREATE INDEX IF NOT EXISTS idx_venue_place_id ON venue(google_place_id);
 
 CREATE TABLE owners (
     id SERIAL PRIMARY KEY,

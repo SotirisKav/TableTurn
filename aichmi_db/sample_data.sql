@@ -23,11 +23,34 @@ INSERT INTO hotel (hotel_id, name, address, area, transfer_price) VALUES
 (4, 'Diamond Deluxe Hotel', 'Kardamena Beach, 85302 Kardamena', 'Kardamena', 30.00),
 (5, 'Sunrise Hotel', 'Tigkaki Beach, 85300 Kos', 'Tingaki', 20.00);
 
--- Insert venue (restaurant)
-INSERT INTO venue (name, address, area, type, rating, pricing, image_url, description, cuisine) VALUES
-('Lofaki Restaurant', 'Agios Nektarios, 85300 Kos', 'Kos Harbor', 'restaurant', 4.8, 'expensive', 'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1b/ee/e9/0c/dining-under-the-best.jpg?w=900&h=500&s=1', 'Authentic Greek cuisine with fresh seafood and traditional recipes passed down through generations. Located in the beautiful Kos Harbor with stunning sea views.', 'Greek & modern cuisine');
+-- Insert venue (restaurant) - FIXED to match DDL structure
+INSERT INTO venue (
+    name, 
+    address, 
+    area, 
+    island,              -- This column exists in DDL
+    type, 
+    rating, 
+    pricing, 
+    image_url, 
+    google_place_id,     -- This column exists in DDL
+    description, 
+    cuisine
+) VALUES (
+    'Lofaki Restaurant', 
+    'Agios Nektarios, 85300 Kos',
+    'Kos Harbor',
+    'Kos',                                  -- Island column
+    'restaurant', 
+    4.8, 
+    'expensive', 
+    'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1b/ee/e9/0c/dining-under-the-best.jpg?w=900&h=500&s=1', 
+    'ChIJexampleplaceid123',                -- Google Place ID
+    'Authentic Greek cuisine with fresh seafood and traditional recipes passed down through generations. Located in the beautiful Kos Harbor with stunning sea views.', 
+    'Greek & modern cuisine'
+);
 
--- Insert owners for the venue (using correct column names)
+-- Insert owners for the venue
 INSERT INTO owners (first_name, last_name, email, phone, venue_id) VALUES
 ('Vasilis', 'Manias', 'vasilis_manias@lofaki.gr', '+30 22420 12345', 1);
 
@@ -117,3 +140,77 @@ INSERT INTO menu_item (venue_id, name, description, price, category, is_vegetari
 (1, 'Lamb "Kleftiko"', 'Lamb, herbs, slow-cooked', 18.00, 'Greek Cuisine', FALSE, FALSE, FALSE),
 (1, 'Beef Steak', NULL, 18.00, 'Grill', FALSE, FALSE, TRUE),
 (1, 'Grilled Vegan Burger', NULL, 12.00, 'Grill', TRUE, TRUE, TRUE);
+
+-- Insert additional sample venues - FIXED to match DDL structure
+INSERT INTO venue (
+    name, 
+    address, 
+    area, 
+    island,
+    type, 
+    rating, 
+    pricing, 
+    image_url, 
+    google_place_id,
+    description, 
+    cuisine
+) VALUES 
+(
+    'Mykonos Paradise Restaurant', 
+    'Paradise Beach, 84600 Mykonos',
+    'Paradise Beach',
+    'Mykonos',
+    'restaurant', 
+    4.6, 
+    'expensive', 
+    'https://example.com/mykonos-paradise.jpg', 
+    'ChIJexampleparadise456',
+    'Beachfront dining with spectacular sunset views and fresh Mediterranean cuisine.', 
+    'Mediterranean'
+),
+(
+    'Santorini Sunset Taverna', 
+    'Oia Village, 84702 Santorini',
+    'Oia',
+    'Santorini',
+    'restaurant', 
+    4.9, 
+    'expensive', 
+    'https://example.com/santorini-sunset.jpg', 
+    'ChIJexamplesantorini789',
+    'Traditional Greek taverna with breathtaking caldera views and authentic local dishes.', 
+    'Traditional Greek'
+),
+(
+    'Rhodes Castle View', 
+    'Old Town, 85100 Rhodes',
+    'Old Town',
+    'Rhodes',
+    'restaurant', 
+    4.5, 
+    'moderate', 
+    'https://example.com/rhodes-castle.jpg', 
+    'ChIJexamplerhodes012',
+    'Historic restaurant in the medieval old town with castle views and traditional cuisine.', 
+    'Greek Traditional'
+);
+
+-- Insert owners for the new venues
+INSERT INTO owners (first_name, last_name, email, phone, venue_id) VALUES
+('Maria', 'Papadopoulos', 'maria@paradiserestaurant.gr', '+30 22890 23456', 2),
+('Nikos', 'Stavros', 'nikos@sunsetaverna.gr', '+30 22860 34567', 3),
+('Dimitris', 'Kostas', 'dimitris@castleview.gr', '+30 22410 45678', 4);
+
+-- Insert table inventory for new venues
+INSERT INTO table_inventory (venue_id, table_type, max_tables) VALUES
+-- Mykonos Paradise Restaurant
+(2, 'standard', 8),
+(2, 'grass', 6),
+(2, 'special', 4),
+-- Santorini Sunset Taverna  
+(3, 'standard', 10),
+(3, 'special', 6),
+-- Rhodes Castle View
+(4, 'standard', 12),
+(4, 'grass', 4),
+(4, 'special', 2);
