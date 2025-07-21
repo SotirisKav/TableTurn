@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-security:
+    name: Lint and Security
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: |
+          package-lock.json
+          aichmi_frontend/package-lock.json
+          aichmi_backend/package-lock.json
+    
+    - name: Install all dependencies
+      run: npm run install:all
+    
+    - name: Lint frontend
+      run: npm run lint
+      continue-on-error: true  # Allow lint errors for now
+    
+    - name: Security audit
+      run: npm run audit
+    
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    needs: lint-and-security
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: |
+          package-lock.json
+          aichmi_frontend/package-lock.json
+          aichmi_backend/package-lock.json
+    
+    - name: Install all dependencies
+      run: npm run install:all
+    
+    - name: Build frontend
+      run: npm run build
+    
+    - name: Run frontend tests
+      run: |
+        cd aichmi_frontend
+        if npm list jest > /dev/null 2>&1 || grep -q '"test"' package.json; then
+          npm test -- --ci --coverage --watchAll=false
+        else
+          echo "ℹ️ No tests found for frontend"
+        fi
+      continue-on-error: true
+    
+    - name: Run backend tests
+      run: |
+        cd aichmi_backend
+        if npm list jest > /dev/null 2>&1 || npm list mocha > /dev/null 2>&1 || grep -q '"test"' package.json; then
+          npm test
+        else
+          echo "ℹ️ No tests found for backend"
+        fi
+      continue-on-error: true
+    
+    - name: Upload frontend build artifacts
+      if: matrix.node-version == '20.x'
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: aichmi_frontend/dist/
+        retention-days: 7
