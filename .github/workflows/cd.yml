@@ -23,14 +23,11 @@ jobs:
       with:
         node-version: 20.x
         cache: 'npm'
-        cache-dependency-path: |
-          package-lock.json
-          aichmi_frontend/package-lock.json
-          aichmi_backend/package-lock.json
+        cache-dependency-path: package-lock.json
     
     - name: Install dependencies and build
       run: |
-        npm run install:all
+        npm ci
         npm run build
     
     - name: Build Docker image

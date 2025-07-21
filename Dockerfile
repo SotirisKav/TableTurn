@@ -3,7 +3,7 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 COPY aichmi_frontend/package*.json ./
-RUN npm ci --only=production
+RUN npm install
 
 COPY aichmi_frontend/ ./
 RUN npm run build
@@ -15,7 +15,7 @@ WORKDIR /app
 
 # Install backend dependencies
 COPY aichmi_backend/package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Copy backend source
 COPY aichmi_backend/ ./
