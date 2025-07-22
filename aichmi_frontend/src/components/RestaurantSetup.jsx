@@ -7,6 +7,7 @@ function RestaurantSetup() {
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [collectedData, setCollectedData] = useState({});
+    const [showMapPicker, setShowMapPicker] = useState(false); // Add this state
     const navigate = useNavigate();
     const messagesEndRef = useRef(null);
     const chatContainerRef = useRef(null);
@@ -51,6 +52,9 @@ function RestaurantSetup() {
     const handleLocationSelect = async (locationData) => {
         console.log('📍 Location selected:', locationData);
         
+        // Hide the map picker after selection
+        setShowMapPicker(false);
+        
         const locationMessage = `location_selected: ${JSON.stringify({
             lat: locationData.lat,
             lng: locationData.lng,
@@ -61,7 +65,7 @@ function RestaurantSetup() {
         })}`;
         
         const userMessage = {
-            text: locationMessage,
+            text: `📍 Selected location: ${locationData.address}, ${locationData.area}, ${locationData.island}`,
             sender: 'user',
             timestamp: new Date()
         };
@@ -77,7 +81,7 @@ function RestaurantSetup() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    message: locationMessage,
+                    message: locationMessage, // Send the raw location data to backend
                     history: conversationHistory,
                     collectedData: collectedData
                 })
@@ -88,6 +92,7 @@ function RestaurantSetup() {
             }
 
             const data = await response.json();
+            console.log('🔄 Setup response:', data);
             
             if (data.reply) {
                 const aiMessage = {
@@ -98,13 +103,21 @@ function RestaurantSetup() {
                 
                 setMessages(prev => [...prev, aiMessage]);
                 
+                // Check if we need to show the map picker
+                if (data.needsMap) {
+                    console.log('🗺️ Showing map picker');
+                    setShowMapPicker(true);
+                } else {
+                    setShowMapPicker(false);
+                }
+                
                 if (data.collectedData) {
                     setCollectedData(data.collectedData);
                 }
                 
                 if (data.setupComplete) {
-                    if (data.restaurantData) {
-                        localStorage.setItem('restaurantData', JSON.stringify(data.restaurantData));
+                    if (data.venueId) {
+                        localStorage.setItem('venueId', data.venueId);
                     }
                     setTimeout(() => {
                         navigate('/dashboard');
@@ -119,6 +132,7 @@ function RestaurantSetup() {
                 timestamp: new Date()
             };
             setMessages(prev => [...prev, errorMessage]);
+            setShowMapPicker(false);
         } finally {
             setIsLoading(false);
         }
@@ -161,6 +175,7 @@ function RestaurantSetup() {
             }
 
             const data = await response.json();
+            console.log('🔄 Setup response:', data);
 
             if (data.reply) {
                 const aiMessage = {
@@ -171,13 +186,21 @@ function RestaurantSetup() {
                 
                 setMessages(prev => [...prev, aiMessage]);
 
+                // Check if we need to show the map picker
+                if (data.needsMap) {
+                    console.log('🗺️ Showing map picker');
+                    setShowMapPicker(true);
+                } else {
+                    setShowMapPicker(false);
+                }
+
                 if (data.collectedData) {
                     setCollectedData(data.collectedData);
                 }
 
                 if (data.setupComplete) {
-                    if (data.restaurantData) {
-                        localStorage.setItem('restaurantData', JSON.stringify(data.restaurantData));
+                    if (data.venueId) {
+                        localStorage.setItem('venueId', data.venueId);
                     }
                     setTimeout(() => {
                         navigate('/dashboard');
@@ -192,6 +215,7 @@ function RestaurantSetup() {
                 timestamp: new Date()
             };
             setMessages(prev => [...prev, errorMessage]);
+            setShowMapPicker(false);
         } finally {
             setIsLoading(false);
         }
@@ -205,68 +229,35 @@ function RestaurantSetup() {
     };
 
     const getProgressPercentage = () => {
-        const totalFields = 11;
-        const collectedFields = Object.keys(collectedData).length;
+        const totalFields = 10; // Fixed to match backend
+        const collectedFields = Object.keys(collectedData).filter(key => !key.startsWith('_')).length;
         return Math.round((collectedFields / totalFields) * 100);
     };
 
     const getProgressText = () => {
-        const collectedFields = Object.keys(collectedData).length;
-        const totalFields = 11;
+        const collectedFields = Object.keys(collectedData).filter(key => !key.startsWith('_')).length;
+        const totalFields = 10;
         
         if (collectedFields === 0) return 'Getting Started';
         if (collectedFields < 3) return 'Restaurant Basic Info';
         if (collectedFields < 6) return 'Location & Contact';
         if (collectedFields < 9) return 'Restaurant Details';
-        if (collectedFields < 11) return 'Owner Information';
+        if (collectedFields < 10) return 'Owner Information';
         return 'Setup Complete!';
     };
 
-    // Make sure your message rendering handles the map correctly
+    // Simplified message rendering - no more [SHOW_MAP] parsing
     const renderMessageText = (message) => {
-      if (message.text.includes('[SHOW_MAP]')) {
-        const parts = message.text.split('[SHOW_MAP]');
         return (
-          <div className="message-with-map">
-            {parts[0] && (
-              <div className="message-text-before">
-                {parts[0].trim().split('\n').map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < parts[0].trim().split('\n').length - 1 && <br />}
-                  </span>
+            <div className="message-text">
+                {message.text.split('\n').map((line, i) => (
+                    <span key={i}>
+                        {line}
+                        {i < message.text.split('\n').length - 1 && <br />}
+                    </span>
                 ))}
-              </div>
-            )}
-
-            <div className="map-container">
-              <LocationPicker onLocationSelect={handleLocationSelect} />
             </div>
-
-            {parts[1] && (
-              <div className="message-text-after">
-                {parts[1].trim().split('\n').map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < parts[1].trim().split('\n').length - 1 && <br />}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
         );
-      } else {
-        return (
-          <div className="message-text">
-            {message.text.split('\n').map((line, i) => (
-              <span key={i}>
-                {line}
-                {i < message.text.split('\n').length - 1 && <br />}
-              </span>
-            ))}
-          </div>
-        );
-      }
     };
 
     return (
@@ -283,7 +274,7 @@ function RestaurantSetup() {
                             ></div>
                         </div>
                         <span className="progress-text">
-                            {getProgressText()} ({Object.keys(collectedData).length}/11)
+                            {getProgressText()} ({Object.keys(collectedData).filter(key => !key.startsWith('_')).length}/10)
                         </span>
                     </div>
                 </div>
@@ -316,6 +307,17 @@ function RestaurantSetup() {
                         )}
                         <div ref={messagesEndRef} />
                     </div>
+
+                    {/* Show map picker when needsMap is true */}
+                    {showMapPicker && (
+                        <div className="map-picker-container">
+                            <div className="map-picker-header">
+                                <h3>📍 Select Your Restaurant Location</h3>
+                                <p>Click on the map or search for your restaurant's exact location</p>
+                            </div>
+                            <LocationPicker onLocationSelect={handleLocationSelect} />
+                        </div>
+                    )}
 
                     <div className="chat-input-section">
                         <div className="chat-input-container">

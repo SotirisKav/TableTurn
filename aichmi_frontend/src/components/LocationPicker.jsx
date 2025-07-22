@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, StandaloneSearchBox } from '@react-google-maps/api';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 
 const GREEK_ISLANDS_CENTER = {
   lat: 37.0,
@@ -27,7 +27,7 @@ const mapOptions = {
       east: 29.7,
     },
     strictBounds: false,
-  },
+  }
 };
 
 const libraries = ['places'];
@@ -37,31 +37,97 @@ const LocationPicker = ({ onLocationSelect, initialLocation = null }) => {
   const [marker, setMarker] = useState(initialLocation);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [searchBox, setSearchBox] = useState(null);
-  const [selectedAddress, setSelectedAddress] = useState('');
-  const [showConfirmButton, setShowConfirmButton] = useState(false);
   const [locationData, setLocationData] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [autocomplete, setAutocomplete] = useState(null);
 
   const searchBoxRef = useRef();
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  // Check if API key exists with detailed logging
-  const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: apiKey,
+    libraries: libraries,
+    region: 'GR',
+    language: 'en'
+  });
 
-  console.log('🔑 Detailed API Key check:', {
-    hasApiKey: !!apiKey,
-    keyLength: apiKey ? apiKey.length : 0,
-    keyPreview: apiKey ? `${apiKey.substring(0, 15)}...` : 'No key found',
-    fullKey: apiKey, // Remove this line in production!
-    allEnvVars: Object.keys(process.env).filter(key => key.startsWith('REACT_APP_'))
-});
+  // Initialize Autocomplete when map loads
+  useEffect(() => {
+    if (isLoaded && searchBoxRef.current && !autocomplete) {
+      const autocompleteService = new window.google.maps.places.Autocomplete(
+        searchBoxRef.current,
+        {
+          bounds: new window.google.maps.LatLngBounds(
+            new window.google.maps.LatLng(34.8, 19.3),
+            new window.google.maps.LatLng(41.8, 29.7)
+          ),
+          componentRestrictions: { country: 'gr' },
+          fields: ['place_id', 'geometry', 'name', 'formatted_address', 'address_components'],
+          types: ['establishment', 'geocode']
+        }
+      );
 
-const { isLoaded, loadError } = useJsApiLoader({
-  id: 'google-map-script',
-  googleMapsApiKey: apiKey,
-  libraries: libraries,
-  region: 'GR',
-  language: 'en',
-});
+      autocompleteService.addListener('place_changed', () => {
+        const place = autocompleteService.getPlace();
+        if (place.geometry && place.geometry.location) {
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          processPlace(place, lat, lng);
+        }
+      });
+
+      setAutocomplete(autocompleteService);
+    }
+  }, [isLoaded]);
+
+  const processPlace = useCallback((place, lat, lng) => {
+    let island = '';
+    let area = '';
+    let country = '';
+    
+    if (place.address_components) {
+      place.address_components.forEach(component => {
+        const types = component.types;
+        if (types.includes('administrative_area_level_1')) {
+          island = component.long_name;
+        }
+        if (types.includes('locality') || types.includes('administrative_area_level_2')) {
+          area = component.long_name;
+        }
+        if (types.includes('country')) {
+          country = component.long_name;
+        }
+      });
+    }
+
+    if (country !== 'Greece') {
+      setError('Please select a location in Greece');
+      setMarker(null);
+      setLocationData(null);
+      setShowPopup(false);
+      return;
+    }
+
+    const locationInfo = {
+      lat,
+      lng,
+      island: island || area || 'Unknown Island',
+      area: area || island || 'Unknown Area',
+      address: place.formatted_address || `${lat}, ${lng}`,
+      placeId: place.place_id || null
+    };
+
+    setLocationData(locationInfo);
+    setMarker({ lat, lng });
+    setError(null);
+    setShowPopup(true); // Show popup when location is processed
+
+    if (map) {
+      map.panTo({ lat, lng });
+      map.setZoom(16);
+    }
+  }, [map]);
 
   const onLoad = useCallback((map) => {
     setMap(map);
@@ -78,152 +144,55 @@ const { isLoaded, loadError } = useJsApiLoader({
     setMarker({ lat, lng });
     setIsLoading(true);
     setError(null);
-    setShowConfirmButton(false);
+    setShowPopup(false); // Hide popup while loading
 
     try {
       const geocoder = new window.google.maps.Geocoder();
       
       geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === 'OK' && results[0]) {
+        if (status === 'OK' && results && results.length > 0) {
           const result = results[0];
-          const addressComponents = result.address_components;
-          
-          // Extract location details
-          let island = '';
-          let area = '';
-          let country = '';
-          
-          addressComponents.forEach(component => {
-            const types = component.types;
-            if (types.includes('administrative_area_level_1')) {
-              island = component.long_name;
-            }
-            if (types.includes('locality') || types.includes('administrative_area_level_2')) {
-              area = component.long_name;
-            }
-            if (types.includes('country')) {
-              country = component.long_name;
-            }
-          });
-
-          // Check if it's in Greece
-          if (country !== 'Greece') {
-            setError('Please select a location in Greece');
-            setMarker(null);
-            setIsLoading(false);
-            return;
-          }
-
-          const locationInfo = {
-            lat,
-            lng,
-            island: island || area,
-            area: area || island,
-            address: result.formatted_address,
-            placeId: result.place_id
-          };
-
-          setLocationData(locationInfo);
-          setSelectedAddress(result.formatted_address);
-          setShowConfirmButton(true);
+          processPlace(result, lat, lng);
           setIsLoading(false);
         } else {
           setError('Could not get address for this location');
-          setMarker(null);
+          setLocationData(null);
+          setShowPopup(false);
           setIsLoading(false);
         }
       });
     } catch (err) {
-      console.error('Geocoding error:', err);
       setError('Failed to get location details');
-      setMarker(null);
+      setLocationData(null);
+      setShowPopup(false);
       setIsLoading(false);
     }
-  }, []);
+  }, [processPlace]);
 
-  const onSearchBoxLoad = useCallback((ref) => {
-    setSearchBox(ref);
-  }, []);
-
-  const onPlacesChanged = useCallback(() => {
-    if (searchBox) {
-      const places = searchBox.getPlaces();
-      
-      if (places && places.length > 0) {
-        const place = places[0];
-        const lat = place.geometry.location.lat();
-        const lng = place.geometry.location.lng();
-
-        // Check if location is in Greece
-        const isInGreece = place.address_components?.some(component => 
-          component.types.includes('country') && 
-          component.long_name === 'Greece'
-        );
-
-        if (!isInGreece) {
-          setError('Please select a location in Greece');
-          return;
-        }
-
-        setMarker({ lat, lng });
-        
-        // Center map on selected location
-        if (map) {
-          map.panTo({ lat, lng });
-          map.setZoom(15);
-        }
-
-        // Extract location details
-        let island = '';
-        let area = '';
-        
-        place.address_components?.forEach(component => {
-          const types = component.types;
-          if (types.includes('administrative_area_level_1')) {
-            island = component.long_name;
-          }
-          if (types.includes('locality') || types.includes('administrative_area_level_2')) {
-            area = component.long_name;
-          }
-        });
-
-        const locationInfo = {
-          lat,
-          lng,
-          island: island || area,
-          area: area || island,
-          address: place.formatted_address,
-          placeId: place.place_id
-        };
-
-        setLocationData(locationInfo);
-        setSelectedAddress(place.formatted_address);
-        setShowConfirmButton(true);
-        setError(null);
-      }
-    }
-  }, [searchBox, map]);
-
-  const handleConfirmLocation = () => {
+  const handleConfirmLocation = useCallback(() => {
     if (locationData && onLocationSelect) {
       onLocationSelect(locationData);
-      setShowConfirmButton(false);
+      
+      // Clear everything and close popup
       setMarker(null);
-      setSelectedAddress('');
       setLocationData(null);
+      setError(null);
+      setShowPopup(false);
+      if (searchBoxRef.current) {
+        searchBoxRef.current.value = '';
+      }
     }
-  };
+  }, [locationData, onLocationSelect]);
 
-  const handleClearSelection = () => {
+  const handleCancelSelection = useCallback(() => {
     setMarker(null);
-    setSelectedAddress('');
-    setShowConfirmButton(false);
     setLocationData(null);
     setError(null);
+    setShowPopup(false);
     if (searchBoxRef.current) {
       searchBoxRef.current.value = '';
     }
-  };
+  }, []);
 
   if (loadError) {
     return (
@@ -234,9 +203,8 @@ const { isLoaded, loadError } = useJsApiLoader({
         borderRadius: '12px',
         textAlign: 'center'
       }}>
-        <p style={{ color: '#dc2626', margin: 0 }}>
-          Failed to load Google Maps. Please check your API key configuration.
-        </p>
+        <h3 style={{ color: '#dc2626' }}>❌ Google Maps Load Error</h3>
+        <p style={{ color: '#dc2626' }}>Failed to load Google Maps</p>
       </div>
     );
   }
@@ -251,205 +219,275 @@ const { isLoaded, loadError } = useJsApiLoader({
         background: '#f8fafc',
         borderRadius: '12px'
       }}>
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1rem'
-        }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            border: '3px solid #e0e7ef',
-            borderTop: '3px solid #1e3a8a',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }}></div>
-          <p style={{ color: '#6b7280', margin: 0 }}>Loading map...</p>
-        </div>
+        <p style={{ color: '#6b7280' }}>Loading Google Maps...</p>
       </div>
     );
   }
 
   return (
-    <div className="location-picker" style={{ width: '100%', height: '450px' }}>
-      <div style={{ marginBottom: '1rem' }}>
-        <StandaloneSearchBox
-          onLoad={onSearchBoxLoad}
-          onPlacesChanged={onPlacesChanged}
-        >
+    <div style={{ width: '100%', position: 'relative' }}>
+      {/* SEARCH + MAP CONTAINER */}
+      <div style={{ 
+        width: '100%',
+        background: '#ffffff',
+        borderRadius: '12px',
+        border: '2px solid #e0e7ef',
+        overflow: 'hidden'
+      }}>
+        {/* Search Input */}
+        <div style={{ padding: '1rem', borderBottom: '1px solid #e0e7ef' }}>
           <input
             ref={searchBoxRef}
             type="text"
-            placeholder="Search for your restaurant location in Greece..."
+            placeholder="Search for your restaurant name or location in Greece..."
             style={{
               width: '100%',
               padding: '12px 16px',
               border: '2px solid #e0e7ef',
               borderRadius: '12px',
               fontSize: '16px',
-              outline: 'none',
-              transition: 'border-color 0.2s ease'
+              outline: 'none'
             }}
-            onFocus={(e) => e.target.style.borderColor = '#1e3a8a'}
-            onBlur={(e) => e.target.style.borderColor = '#e0e7ef'}
           />
-        </StandaloneSearchBox>
-      </div>
-
-      <div style={{ 
-        width: '100%', 
-        height: '350px', 
-        border: '2px solid #e0e7ef', 
-        borderRadius: '12px',
-        overflow: 'hidden'
-      }}>
-        <GoogleMap
-          mapContainerStyle={mapContainerStyle}
-          center={marker || GREEK_ISLANDS_CENTER}
-          zoom={marker ? 15 : 7}
-          onLoad={onLoad}
-          onUnmount={onUnmount}
-          onClick={handleMapClick}
-          options={mapOptions}
-        >
-          {marker && (
-            <Marker
-              position={marker}
-              animation={window.google?.maps?.Animation?.BOUNCE}
-            />
-          )}
-        </GoogleMap>
-      </div>
-
-      {isLoading && (
-        <div style={{ 
-          marginTop: '1rem', 
-          padding: '12px', 
-          background: '#f0f9ff', 
-          border: '1px solid #0ea5e9', 
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center'
-        }}>
-          <div style={{
-            width: '16px',
-            height: '16px',
-            border: '2px solid #0ea5e9',
-            borderTop: '2px solid transparent',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            marginRight: '8px'
-          }}></div>
-          <span style={{ color: '#0369a1' }}>Getting location details...</span>
         </div>
-      )}
 
+        {/* Map Container */}
+        <div style={{ 
+          width: '100%', 
+          height: '400px', // Increased height since no confirmation box below
+          position: 'relative'
+        }}>
+          <GoogleMap
+            mapContainerStyle={mapContainerStyle}
+            center={marker || GREEK_ISLANDS_CENTER}
+            zoom={marker ? 16 : 7}
+            onLoad={onLoad}
+            onUnmount={onUnmount}
+            onClick={handleMapClick}
+            options={mapOptions}
+          >
+            {marker && (
+              <Marker
+                position={marker}
+                animation={window.google?.maps?.Animation?.BOUNCE}
+              />
+            )}
+          </GoogleMap>
+
+          {/* Loading Overlay */}
+          {isLoading && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '12px',
+              zIndex: 1000
+            }}>
+              <div style={{
+                background: 'white',
+                padding: '1rem 2rem',
+                borderRadius: '8px',
+                color: '#0369a1',
+                fontWeight: 'bold'
+              }}>
+                Getting location details...
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Error Message */}
       {error && (
         <div style={{ 
-          marginTop: '1rem', 
+          marginTop: '1rem',
           padding: '12px', 
           background: '#fef2f2', 
           border: '1px solid #fecaca', 
-          borderRadius: '8px'
+          borderRadius: '8px',
+          textAlign: 'center'
         }}>
           <p style={{ color: '#dc2626', margin: 0 }}>{error}</p>
-          <p style={{ fontSize: '14px', color: '#b91c1c', margin: '4px 0 0 0' }}>
-            Please select a location on a Greek island.
-          </p>
         </div>
       )}
 
-      {showConfirmButton && selectedAddress && (
-        <div style={{ 
-          marginTop: '1rem', 
-          padding: '16px', 
-          background: '#f0fdf4', 
-          border: '1px solid #bbf7d0', 
-          borderRadius: '12px'
-        }}>
-          <p style={{ 
-            color: '#166534', 
-            fontWeight: '600', 
-            marginBottom: '8px',
-            fontSize: '14px'
+      {/* POPUP MODAL */}
+      {showPopup && locationData && (
+        <>
+          {/* Backdrop */}
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              zIndex: 9998,
+              backdropFilter: 'blur(4px)'
+            }}
+            onClick={handleCancelSelection}
+          />
+          
+          {/* Modal */}
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'white',
+            borderRadius: '16px',
+            padding: '2rem',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            zIndex: 9999,
+            maxWidth: '90vw',
+            width: '500px',
+            maxHeight: '90vh',
+            overflow: 'auto'
           }}>
-            📍 Selected Location:
-          </p>
-          <p style={{ 
-            color: '#15803d', 
-            marginBottom: '12px',
-            fontSize: '15px',
-            fontWeight: '500'
-          }}>
-            {selectedAddress}
-          </p>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={handleConfirmLocation}
-              style={{
-                background: '#1e3a8a',
-                color: 'white',
-                border: 'none',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                transition: 'background 0.2s ease',
-                flex: 1
-              }}
-              onMouseOver={(e) => e.target.style.background = '#1e40af'}
-              onMouseOut={(e) => e.target.style.background = '#1e3a8a'}
-            >
-              ✓ Confirm This Location
-            </button>
-            <button
-              onClick={handleClearSelection}
-              style={{
-                background: '#6b7280',
-                color: 'white',
-                border: 'none',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                transition: 'background 0.2s ease'
-              }}
-              onMouseOver={(e) => e.target.style.background = '#4b5563'}
-              onMouseOut={(e) => e.target.style.background = '#6b7280'}
-            >
-              ✕ Clear
-            </button>
+            {/* Header */}
+            <div style={{
+              textAlign: 'center',
+              marginBottom: '1.5rem',
+              paddingBottom: '1rem',
+              borderBottom: '2px solid #f0f4f8'
+            }}>
+              <h2 style={{
+                color: '#15803d',
+                fontSize: '1.5rem',
+                fontWeight: 'bold',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem'
+              }}>
+                📍 Confirm Your Location
+              </h2>
+            </div>
+
+            {/* Location Details */}
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{
+                background: '#f8fffe',
+                border: '2px solid #d1fae5',
+                borderRadius: '12px',
+                padding: '1.5rem'
+              }}>
+                <div style={{ marginBottom: '1rem' }}>
+                  <span style={{ 
+                    fontWeight: 'bold', 
+                    color: '#166534',
+                    display: 'block',
+                    marginBottom: '0.25rem'
+                  }}>
+                    🏝️ Island:
+                  </span>
+                  <span style={{ color: '#15803d', fontSize: '1.1rem' }}>
+                    {locationData.island}
+                  </span>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <span style={{ 
+                    fontWeight: 'bold', 
+                    color: '#166534',
+                    display: 'block',
+                    marginBottom: '0.25rem'
+                  }}>
+                    📍 Area:
+                  </span>
+                  <span style={{ color: '#15803d', fontSize: '1.1rem' }}>
+                    {locationData.area}
+                  </span>
+                </div>
+                
+                <div>
+                  <span style={{ 
+                    fontWeight: 'bold', 
+                    color: '#166534',
+                    display: 'block',
+                    marginBottom: '0.25rem'
+                  }}>
+                    🏠 Full Address:
+                  </span>
+                  <span style={{ color: '#15803d', fontSize: '1.1rem' }}>
+                    {locationData.address}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={handleConfirmLocation}
+                style={{
+                  flex: 1,
+                  maxWidth: '200px',
+                  background: '#16a34a',
+                  color: 'white',
+                  border: 'none',
+                  padding: '1rem 1.5rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = '#15803d';
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 16px rgba(22, 163, 74, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = '#16a34a';
+                  e.target.style.transform = 'translateY(0px)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(22, 163, 74, 0.3)';
+                }}
+              >
+                ✅ Confirm Location
+              </button>
+              
+              <button
+                onClick={handleCancelSelection}
+                style={{
+                  background: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  padding: '1rem 1.5rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = '#4b5563';
+                  e.target.style.transform = 'translateY(-2px)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = '#6b7280';
+                  e.target.style.transform = 'translateY(0px)';
+                }}
+              >
+                ❌ Cancel
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
-
-      <div style={{ 
-        marginTop: '1rem', 
-        fontSize: '14px', 
-        color: '#6b7280',
-        background: '#f8fafc',
-        padding: '12px',
-        borderRadius: '8px'
-      }}>
-        <p style={{ margin: 0, marginBottom: '8px' }}>
-          💡 <strong>How to select your location:</strong>
-        </p>
-        <ul style={{ margin: 0, paddingLeft: '20px' }}>
-          <li>Search for your restaurant in the search box above</li>
-          <li>Or click directly on the map where your restaurant is located</li>
-          <li>Confirm your selection using the "Confirm This Location" button</li>
-        </ul>
-      </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };
