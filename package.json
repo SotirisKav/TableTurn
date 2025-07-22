@@ -1,0 +1,42 @@
+{
+  "name": "aichmi",
+  "version": "1.0.0",
+  "description": "AI reservation bot - full-stack application",
+  "private": true,
+  "workspaces": [
+    "aichmi_frontend",
+    "aichmi_backend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run install:frontend && npm run install:backend",
+    "install:frontend": "cd aichmi_frontend && npm install",
+    "install:backend": "cd aichmi_backend && npm install",
+    "build": "cd aichmi_frontend && npm run build",
+    "start": "cd aichmi_backend && npm start",
+    "dev:frontend": "cd aichmi_frontend && npm run dev",
+    "dev:backend": "cd aichmi_backend && npm run devStart",
+    "lint": "cd aichmi_frontend && npm run lint",
+    "build-and-start": "npm run build && npm run start",
+    "audit": "npm audit && cd aichmi_frontend && npm audit && cd ../aichmi_backend && npm audit",
+    "audit:fix": "npm audit fix; cd aichmi_frontend && npm audit fix; cd ../aichmi_backend && npm audit fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SotirisKav/aichmi.git"
+  },
+  "keywords": [
+    "ai",
+    "reservation",
+    "bot",
+    "restaurant",
+    "nodejs",
+    "react",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

@@ -1,0 +1,92 @@
+name: CD
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual deployment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Uncomment when CI workflow is stable
+    # needs: [lint-and-security, build-and-test]
+    
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: package-lock.json
+    
+    - name: Install dependencies and build
+      run: |
+        npm ci
+        npm run build
+    
+    - name: Build Docker image
+      run: |
+        docker build -t aichmi:latest .
+        echo "📦 Docker image built successfully"
+    
+    - name: Prepare deployment package
+      run: |
+        mkdir -p deploy
+        cp -r aichmi_backend/* deploy/
+        cp -r aichmi_frontend/dist deploy/frontend_dist
+        cp -r aichmi_db deploy/
+        cp Dockerfile deploy/
+        cp docker-compose.yml deploy/
+        cp .env.example deploy/
+        
+        # Create deployment info
+        echo "Build Date: $(date)" > deploy/deployment-info.txt
+        echo "Commit: ${GITHUB_SHA}" >> deploy/deployment-info.txt
+        echo "Branch: ${GITHUB_REF_NAME}" >> deploy/deployment-info.txt
+        echo "Build Number: ${GITHUB_RUN_NUMBER}" >> deploy/deployment-info.txt
+    
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-package
+        path: deploy/
+        retention-days: 30
+    
+    - name: Upload Docker image
+      if: github.event_name == 'push'
+      run: |
+        # Save Docker image as artifact
+        docker save aichmi:latest | gzip > deploy/aichmi-docker-image.tar.gz
+        echo "🐳 Docker image saved for deployment"
+    
+    # Placeholder for actual deployment
+    # This would typically deploy to a cloud provider like:
+    # - Heroku: heroku container:push web && heroku container:release web
+    # - AWS: aws ecs update-service
+    # - Google Cloud: gcloud run deploy
+    # - DigitalOcean: doctl apps create-deployment
+    - name: Deploy to staging
+      id: deploy
+      run: |
+        echo "🚀 Deployment prepared!"
+        echo "📦 Package size: $(du -sh deploy | cut -f1)"
+        echo "🐳 Docker image ready for deployment"
+        echo "::notice::Deployment artifacts created successfully"
+        echo "::notice::To deploy: docker load < aichmi-docker-image.tar.gz && docker-compose up"
+        echo "url=https://your-app-url.com" >> $GITHUB_OUTPUT
+    
+    - name: Post deployment health check
+      run: |
+        echo "✅ Deployment health check placeholder"
+        echo "In a real deployment, this would:"
+        echo "- Check if the application is responding"
+        echo "- Verify database connectivity"
+        echo "- Run smoke tests"
+        echo "- Check API endpoints"
+        echo "- Verify frontend loads correctly"
