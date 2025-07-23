@@ -36,6 +36,9 @@ const db = {
     query: async (sql, params = []) => {
         const result = await pool.query(sql, params);
         return result.rows;
+    },
+    connect: async () => {
+        return await pool.connect();
     }
 };
 

@@ -12,7 +12,7 @@ import Confirmation from './components/Confirmation';
 import Subscriptions from './components/Subscriptions';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import RestaurantSetup from './components/RestaurantSetup';
+import SimpleRestaurantForm from './components/SimpleRestaurantForm';
 import './App.css';
 
 function App() {
@@ -36,7 +36,7 @@ function App() {
         <Route path="/subscriptions" element={<Subscriptions />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/restaurant-setup" element={<RestaurantSetup />} />
+        <Route path="/restaurant-setup" element={<SimpleRestaurantForm />} />
       </Routes>
       <Footer />
     </Router>

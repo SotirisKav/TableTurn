@@ -28,7 +28,7 @@ class LocationValidationService {
             }
 
             // Rest of your existing validation logic as fallback...
-            const island = this.detectIslandByBounds(lat, lng);
+            const island = IslandDetectionService.detectIslandByBounds(lat, lng);
 
             if (!island) {
                 return {
@@ -37,8 +37,14 @@ class LocationValidationService {
                 };
             }
 
-            // Your existing code for Google Maps API call, etc.
-            // ...
+            return {
+                isValid: true,
+                island: island,
+                area: 'Unknown Area',
+                address: `${lat}, ${lng}`,
+                placeId: placeId,
+                formattedAddress: `${island}, Greece`
+            };
         } catch (error) {
             console.error('Location validation error:', error);
             return {

@@ -1,12 +1,13 @@
 import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import { fileURLToPath } from 'url';
 import RestaurantService from './services/RestaurantService.js';
 import chatRouter from './routes/chat.js';
 import reservationRouter from './routes/reservation.js';
 import authRouter from './routes/auth.js';
-import restaurantSetupRouter from './routes/restaurantSetup.js';
+import restaurantRegistrationRouter from './routes/restaurantRegistration.js';
 import locationRoutes from './routes/location.js';
 
 dotenv.config();
@@ -15,6 +16,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// CORS middleware - Allow frontend to connect
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8080'],
+  credentials: true
+}));
 
 // Middleware to parse JSON
 app.use(express.json());
@@ -78,8 +85,8 @@ app.use('/api/auth', authRouter);
 // Chat/AI Route
 app.use('/api/chat', chatRouter);
 
-// Restaurant Setup Route (NEW)
-app.use('/api', restaurantSetupRouter);
+// Restaurant Registration Route (NEW SIMPLE FORM)
+app.use('/api', restaurantRegistrationRouter);
 
 // Reservation Route
 app.use('/api/reservation', reservationRouter);
