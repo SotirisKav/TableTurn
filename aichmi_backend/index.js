@@ -6,7 +6,7 @@ import RestaurantService from './services/RestaurantService.js';
 import chatRouter from './routes/chat.js';
 import reservationRouter from './routes/reservation.js';
 import authRouter from './routes/auth.js';
-import restaurantSetupRouter from './routes/restaurantSetup.js';
+import restaurantRegistrationRouter from './routes/restaurantRegistration.js';
 import locationRoutes from './routes/location.js';
 
 dotenv.config();
@@ -78,8 +78,8 @@ app.use('/api/auth', authRouter);
 // Chat/AI Route
 app.use('/api/chat', chatRouter);
 
-// Restaurant Setup Route (NEW)
-app.use('/api', restaurantSetupRouter);
+// Restaurant Registration Route (NEW SIMPLE FORM)
+app.use('/api', restaurantRegistrationRouter);
 
 // Reservation Route
 app.use('/api/reservation', reservationRouter);
