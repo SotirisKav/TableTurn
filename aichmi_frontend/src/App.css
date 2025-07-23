@@ -4323,7 +4323,8 @@ input[type="file"]:focus {
 }
 
 .form-field input,
-.form-field textarea {
+.form-field textarea,
+.form-field select {
     width: 100%;
     padding: 16px 20px;
     border: 2px solid #e5e7eb;
@@ -4334,8 +4335,19 @@ input[type="file"]:focus {
     box-sizing: border-box;
 }
 
+.form-field select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 16px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+    padding-right: 48px;
+}
+
 .form-field input:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-field select:focus {
     outline: none;
     border-color: var(--aegean-blue);
     background: white;
@@ -4344,7 +4356,8 @@ input[type="file"]:focus {
 }
 
 .form-field input.error,
-.form-field textarea.error {
+.form-field textarea.error,
+.form-field select.error {
     border-color: #ef4444;
     background: #fef2f2;
 }
@@ -4390,6 +4403,45 @@ input[type="file"]:focus {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+}
+
+.location-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.location-field label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+.location-field input {
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+.location-field input:focus {
+    outline: none;
+    border-color: #1e40af;
+    box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+}
+
+.map-option {
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+}
+
+.map-option label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
 }
 
 .map-picker-btn {
@@ -4687,5 +4739,220 @@ input[type="file"]:focus {
         width: 35px;
         height: 35px;
         font-size: 1rem;
+    }
+}
+
+/* Opening Hours & Menu Items Form Styling */
+
+/* Section styling consistent with restaurant info */
+.section {
+    margin-bottom: 3rem;
+}
+
+.section-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+    text-align: left;
+}
+
+.section-subtitle {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+    line-height: 1.5;
+}
+
+/* Opening hours styling - enhanced and consistent */
+.hours-grid {
+    display: grid;
+    gap: 12px;
+    background: #fafafa;
+    padding: 24px;
+    border-radius: 16px;
+    border: 2px solid #e5e7eb;
+}
+
+.day-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.day-row:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.day-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 120px;
+}
+
+.day-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--aegean-blue);
+    border-radius: 4px;
+    margin: 0;
+}
+
+.day-checkbox label {
+    font-weight: 500;
+    color: #374151;
+    cursor: pointer;
+    margin: 0;
+    font-size: 1rem;
+}
+
+.time-inputs {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.time-inputs input[type="time"] {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: #fafafa;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    margin: 0;
+}
+
+.time-inputs input[type="time"]:focus {
+    outline: none;
+    border-color: var(--aegean-blue);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.time-inputs span {
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.day-row.disabled {
+    opacity: 0.6;
+    background: #f8fafc;
+}
+
+.day-row.disabled .time-inputs {
+    pointer-events: none;
+}
+
+.day-row.disabled .time-inputs input {
+    background: #f1f5f9;
+    color: #94a3b8;
+}
+
+/* Menu items styling */
+.menu-item {
+    background: #f8fafc;
+    border: 1px solid #e0e7ef;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    position: relative;
+}
+
+.menu-item-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.dietary-options {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.dietary-option {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.dietary-option input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.dietary-option label {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-gray);
+}
+
+.add-item-btn, .remove-item-btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.add-item-btn {
+    background: var(--aegean-blue);
+    color: var(--white);
+    margin-top: 1rem;
+}
+
+.add-item-btn:hover {
+    background: var(--deep-blue);
+    transform: translateY(-1px);
+}
+
+.remove-item-btn {
+    background: #dc2626;
+    color: var(--white);
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.remove-item-btn:hover {
+    background: #b91c1c;
+}
+
+@media (max-width: 768px) {
+    .menu-item-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .day-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .time-inputs {
+        width: 100%;
+        justify-content: space-between;
     }
 }

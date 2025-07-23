@@ -32,11 +32,6 @@ class RestaurantRegistrationService {
             errors.phone = 'Please enter a valid phone number (8-20 digits)';
         }
         
-        // Pricing validation
-        const validPricing = ['affordable', 'moderate', 'expensive'];
-        if (!data.pricing || !validPricing.includes(data.pricing)) {
-            errors.pricing = 'Please select a valid pricing level';
-        }
         
         // Description validation
         if (!data.description || data.description.trim().length < 10) {
@@ -126,35 +121,56 @@ class RestaurantRegistrationService {
         }
     }
     
-    async registerRestaurant(registrationData) {
+    static async registerRestaurant(registrationData) {
+        console.log('🔄 Starting restaurant registration...');
+        console.log('📋 Registration data received:', JSON.stringify(registrationData, null, 2));
+        
+        // Import pool directly
+        const pkg = await import('pg');
+        const { Pool } = pkg.default || pkg;
+        const pool = new Pool({
+            user: process.env.DB_USER || 'sotiriskavadakis',
+            host: process.env.DB_HOST || 'localhost',
+            database: process.env.DB_NAME || 'aichmi',
+            password: process.env.DB_PASSWORD || '',
+            port: process.env.DB_PORT || 5432,
+        });
+        
         const client = await pool.connect();
+        console.log('✅ Database client connected');
         
         try {
             await client.query('BEGIN');
             
             const {
-                ownerName,
-                email,
-                password,
+                ownerFirstName,
+                ownerLastName,
+                ownerEmail,
+                ownerPassword,
                 phoneNumber,
                 restaurantName,
                 location,
                 description,
                 profileImage,
-                backgroundImage
+                backgroundImage,
+                cuisine,
+                phone
             } = registrationData;
             
             // Extract location data
             const { island, area, address, lat, lng } = location || {};
             
             // Hash password
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await bcrypt.hash(ownerPassword, 10);
+            
+            // Combine first and last name
+            const ownerName = `${ownerFirstName} ${ownerLastName}`;
             
             // Insert owner
             const ownerResult = await client.query(
-                `INSERT INTO owners (name, email, password, phone_number) 
-                 VALUES ($1, $2, $3, $4) RETURNING id`,
-                [ownerName, email, hashedPassword, phoneNumber]
+                `INSERT INTO owners (first_name, last_name, email, password, phone) 
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+                [ownerFirstName, ownerLastName, ownerEmail, hashedPassword, phoneNumber]
             );
             
             const ownerId = ownerResult.rows[0].id;
@@ -162,31 +178,41 @@ class RestaurantRegistrationService {
             // Build full location string
             const fullLocation = [address, area, island].filter(Boolean).join(', ');
             
-            // Insert venue with new structure
-            const venueResult = await client.query(
-                `INSERT INTO venues (
+            // Insert restaurant with correct structure
+            const restaurantResult = await client.query(
+                `INSERT INTO restaurant (
                     name, 
                     description, 
-                    location, 
-                    owner_id, 
-                    latitude, 
-                    longitude,
+                    address, 
+                    email,
+                    phone,
+                    area,
+                    island,
                     profile_image_url,
-                    background_image_url
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+                    background_image_url,
+                    cuisine
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING restaurant_id`,
                 [
                     restaurantName,
                     description,
-                    fullLocation,
-                    ownerId,
-                    lat || null,
-                    lng || null,
+                    address || fullLocation,
+                    ownerEmail, // Use owner email as restaurant email for now
+                    phone || phoneNumber,
+                    area || 'Unknown Area',
+                    island || 'Unknown Island',
                     profileImage || null,
-                    backgroundImage || null
+                    backgroundImage || null,
+                    cuisine || 'Other'
                 ]
             );
             
-            const venueId = venueResult.rows[0].id;
+            const restaurantId = restaurantResult.rows[0].restaurant_id;
+            
+            // Update owner with restaurant_id
+            await client.query(
+                `UPDATE owners SET restaurant_id = $1 WHERE id = $2`,
+                [restaurantId, ownerId]
+            );
             
             await client.query('COMMIT');
             
@@ -195,7 +221,7 @@ class RestaurantRegistrationService {
                 message: 'Restaurant registered successfully',
                 data: {
                     ownerId,
-                    venueId,
+                    restaurantId,
                     restaurantName,
                     location: fullLocation
                 }
@@ -207,6 +233,7 @@ class RestaurantRegistrationService {
             throw new Error(`Registration failed: ${error.message}`);
         } finally {
             client.release();
+            await pool.end();
         }
     }
     

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import LocationPicker from './LocationPicker';
 
 const SimpleRestaurantForm = () => {
@@ -7,7 +7,7 @@ const SimpleRestaurantForm = () => {
         // Restaurant Information
         restaurantName: '',
         description: '',
-        restaurantPhone: '',
+        phone: '',
         restaurantEmail: '',
         cuisine: '',
         location: {
@@ -20,21 +20,22 @@ const SimpleRestaurantForm = () => {
         profileImage: null,
         backgroundImage: null,
         hours: [
-            { day: 'Monday', open: '', close: '' },
-            { day: 'Tuesday', open: '', close: '' },
-            { day: 'Wednesday', open: '', close: '' },
-            { day: 'Thursday', open: '', close: '' },
-            { day: 'Friday', open: '', close: '' },
-            { day: 'Saturday', open: '', close: '' },
-            { day: 'Sunday', open: '', close: '' }
+            { day: 'Monday', open: '09:00', close: '22:00', enabled: true },
+            { day: 'Tuesday', open: '09:00', close: '22:00', enabled: true },
+            { day: 'Wednesday', open: '09:00', close: '22:00', enabled: true },
+            { day: 'Thursday', open: '09:00', close: '22:00', enabled: true },
+            { day: 'Friday', open: '09:00', close: '23:00', enabled: true },
+            { day: 'Saturday', open: '09:00', close: '23:00', enabled: true },
+            { day: 'Sunday', open: '10:00', close: '22:00', enabled: true }
         ],
         customTimetable: false,
         customTimetableRows: [],
-        menuItems: [], // { name, description, price, category, is_vegetarian, is_vegan, is_gluten_free }
+        menuItems: [], // { name, description, price, is_vegetarian, is_vegan, is_gluten_free }
         // Owner Information
-        ownerName: '',
-        email: '',
-        password: '',
+        ownerFirstName: '',
+        ownerLastName: '',
+        ownerEmail: '',
+        ownerPassword: '',
         confirmPassword: '',
         phoneNumber: ''
     });
@@ -45,24 +46,31 @@ const SimpleRestaurantForm = () => {
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
+        let processedValue = value;
+        
+        // Phone number validation - only allow numbers and spaces
+        if (name === 'phone' && value) {
+            processedValue = value.replace(/[^0-9\s]/g, '');
+        }
+        
         if (name.startsWith('hours-')) {
             const [_, idx, field] = name.split('-');
             setFormData(prev => {
                 const hours = [...prev.hours];
-                hours[parseInt(idx)][field] = value;
+                hours[parseInt(idx)][field] = field === 'enabled' ? checked : processedValue;
                 return { ...prev, hours };
             });
         } else if (name.startsWith('customTimetableRows-')) {
             const [_, idx, field] = name.split('-');
             setFormData(prev => {
                 const customTimetableRows = [...prev.customTimetableRows];
-                customTimetableRows[parseInt(idx)][field] = value;
+                customTimetableRows[parseInt(idx)][field] = processedValue;
                 return { ...prev, customTimetableRows };
             });
         } else if (type === 'checkbox') {
             setFormData(prev => ({ ...prev, [name]: checked }));
         } else {
-            setFormData(prev => ({ ...prev, [name]: value }));
+            setFormData(prev => ({ ...prev, [name]: processedValue }));
         }
         // Clear error when user starts typing
         if (errors[name]) {
@@ -71,8 +79,7 @@ const SimpleRestaurantForm = () => {
                 [name]: ''
             }));
         }
-    // Menu item handlers
-    // (Removed duplicate handleAddMenuItem, handleMenuItemChange, and handleInputChange)
+    };
 
     // Menu item handlers
     const handleAddMenuItem = () => {
@@ -80,7 +87,7 @@ const SimpleRestaurantForm = () => {
             ...prev,
             menuItems: [
                 ...prev.menuItems,
-                { name: '', description: '', price: '', category: '', is_vegetarian: false, is_vegan: false, is_gluten_free: false, available: true }
+                { name: '', description: '', price: '', is_vegetarian: false, is_vegan: false, is_gluten_free: false }
             ]
         }));
     };
@@ -99,6 +106,23 @@ const SimpleRestaurantForm = () => {
             return { ...prev, menuItems };
         });
     };
+
+    const handleImageUpload = (field, file) => {
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setFormData(prev => ({ ...prev, [field]: e.target.result }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleLocationSelect = (location) => {
+        setFormData(prev => ({ ...prev, location }));
+        setShowMapPicker(false);
+    };
+
+    const validateStep = (step) => {
         const newErrors = {};
         
         if (step === 1) {
@@ -112,22 +136,28 @@ const SimpleRestaurantForm = () => {
             if (!formData.location.island || !formData.location.area || !formData.location.address) {
                 newErrors.location = 'Complete location is required';
             }
+            if (!formData.cuisine.trim()) {
+                newErrors.cuisine = 'Cuisine type is required';
+            }
         } else if (step === 2) {
             // Owner validation
-            if (!formData.ownerName.trim()) {
-                newErrors.ownerName = 'Owner name is required';
+            if (!formData.ownerFirstName.trim()) {
+                newErrors.ownerFirstName = 'First name is required';
             }
-            if (!formData.email.trim()) {
-                newErrors.email = 'Email is required';
-            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                newErrors.email = 'Invalid email format';
+            if (!formData.ownerLastName.trim()) {
+                newErrors.ownerLastName = 'Last name is required';
             }
-            if (!formData.password) {
-                newErrors.password = 'Password is required';
-            } else if (formData.password.length < 8) {
-                newErrors.password = 'Password must be at least 8 characters';
+            if (!formData.ownerEmail.trim()) {
+                newErrors.ownerEmail = 'Email is required';
+            } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.ownerEmail)) {
+                newErrors.ownerEmail = 'Invalid email format';
             }
-            if (formData.password !== formData.confirmPassword) {
+            if (!formData.ownerPassword) {
+                newErrors.ownerPassword = 'Password is required';
+            } else if (formData.ownerPassword.length < 8) {
+                newErrors.ownerPassword = 'Password must be at least 8 characters';
+            }
+            if (formData.ownerPassword !== formData.confirmPassword) {
                 newErrors.confirmPassword = 'Passwords do not match';
             }
             if (!formData.phoneNumber.trim()) {
@@ -157,12 +187,33 @@ const SimpleRestaurantForm = () => {
         setIsLoading(true);
         
         try {
-            const response = await fetch('http://localhost:3001/api/register', {
+            // Transform formData to match backend expectations
+            const submissionData = {
+                // Restaurant fields
+                restaurantName: formData.restaurantName,
+                description: formData.description,
+                cuisine: formData.cuisine,
+                phone: formData.phone,
+                location: formData.location,
+                profileImage: formData.profileImage,
+                backgroundImage: formData.backgroundImage,
+                hours: formData.hours,
+                menuItems: formData.menuItems,
+                
+                // Owner fields with correct backend names
+                ownerFirstName: formData.ownerFirstName,
+                ownerLastName: formData.ownerLastName,
+                ownerEmail: formData.ownerEmail,
+                ownerPassword: formData.ownerPassword,
+                phoneNumber: formData.phoneNumber
+            };
+
+            const response = await fetch('/api/register-restaurant', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(submissionData)
             });
             
             const data = await response.json();
@@ -173,12 +224,28 @@ const SimpleRestaurantForm = () => {
                 setFormData({
                     restaurantName: '',
                     description: '',
+                    phone: '',
+                    restaurantEmail: '',
+                    cuisine: '',
                     location: { island: '', area: '', address: '', lat: null, lng: null },
                     profileImage: null,
                     backgroundImage: null,
-                    ownerName: '',
-                    email: '',
-                    password: '',
+                    hours: [
+                        { day: 'Monday', open: '09:00', close: '22:00', enabled: true },
+                        { day: 'Tuesday', open: '09:00', close: '22:00', enabled: true },
+                        { day: 'Wednesday', open: '09:00', close: '22:00', enabled: true },
+                        { day: 'Thursday', open: '09:00', close: '22:00', enabled: true },
+                        { day: 'Friday', open: '09:00', close: '23:00', enabled: true },
+                        { day: 'Saturday', open: '09:00', close: '23:00', enabled: true },
+                        { day: 'Sunday', open: '10:00', close: '22:00', enabled: true }
+                    ],
+                    customTimetable: false,
+                    customTimetableRows: [],
+                    menuItems: [],
+                    ownerFirstName: '',
+                    ownerLastName: '',
+                    ownerEmail: '',
+                    ownerPassword: '',
                     confirmPassword: '',
                     phoneNumber: ''
                 });
@@ -252,8 +319,8 @@ const SimpleRestaurantForm = () => {
                                 <label>Restaurant Phone</label>
                                 <input
                                     type="tel"
-                                    name="restaurantPhone"
-                                    value={formData.restaurantPhone}
+                                    name="phone"
+                                    value={formData.phone}
                                     onChange={handleInputChange}
                                     placeholder="Enter your restaurant phone"
                                 />
@@ -272,81 +339,222 @@ const SimpleRestaurantForm = () => {
 
                             <div className="form-field">
                                 <label>Cuisine</label>
-                                <input
-                                    type="text"
+                                <select
                                     name="cuisine"
                                     value={formData.cuisine}
                                     onChange={handleInputChange}
-                                    placeholder="Cuisine type (e.g., Greek, Italian)"
-                                />
+                                    className={errors.cuisine ? 'error' : ''}
+                                >
+                                    <option value="">Select cuisine type</option>
+                                    <option value="Greek">Greek</option>
+                                    <option value="Italian">Italian</option>
+                                    <option value="Seafood">Seafood</option>
+                                    <option value="Mediterranean">Mediterranean</option>
+                                    <option value="Traditional">Traditional</option>
+                                    <option value="International">International</option>
+                                    <option value="Fast Food">Fast Food</option>
+                                    <option value="Asian">Asian</option>
+                                    <option value="Mexican">Mexican</option>
+                                    <option value="French">French</option>
+                                    <option value="American">American</option>
+                                    <option value="Vegetarian">Vegetarian</option>
+                                    <option value="Vegan">Vegan</option>
+                                    <option value="BBQ">BBQ</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                {errors.cuisine && <span className="error-text">{errors.cuisine}</span>}
                             </div>
 
-                            {/* Opening/Closing Hours Section */}
-                            <div className="form-section">
-                                <div className="section-header">
-                                    <h2>Opening & Closing Hours</h2>
-                                    <label>
-                                        <input type="checkbox" name="customTimetable" checked={formData.customTimetable} onChange={handleInputChange} />
-                                        Custom Timetable
-                                    </label>
+                            <div className="form-field">
+                                <label>Location</label>
+                                
+                                {/* Manual Location Input */}
+                                <div className="location-inputs">
+                                    <div className="location-row">
+                                        <div className="location-field">
+                                            <label>Address</label>
+                                            <input
+                                                type="text"
+                                                name="address"
+                                                value={formData.location.address}
+                                                onChange={(e) => setFormData(prev => ({
+                                                    ...prev,
+                                                    location: { ...prev.location, address: e.target.value }
+                                                }))}
+                                                placeholder="Street address"
+                                            />
+                                        </div>
+                                        <div className="location-field">
+                                            <label>Area</label>
+                                            <input
+                                                type="text"
+                                                name="area"
+                                                value={formData.location.area}
+                                                onChange={(e) => setFormData(prev => ({
+                                                    ...prev,
+                                                    location: { ...prev.location, area: e.target.value }
+                                                }))}
+                                                placeholder="Area/Neighborhood"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="location-row">
+                                        <div className="location-field">
+                                            <label>Island</label>
+                                            <input
+                                                type="text"
+                                                name="island"
+                                                value={formData.location.island}
+                                                onChange={(e) => setFormData(prev => ({
+                                                    ...prev,
+                                                    location: { ...prev.location, island: e.target.value }
+                                                }))}
+                                                placeholder="Island name"
+                                            />
+                                        </div>
+                                        <div className="map-option">
+                                            <label>Or use map</label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowMapPicker(true)}
+                                                className="map-picker-btn"
+                                            >
+                                                📍 Select on Map
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                {!formData.customTimetable ? (
-                                    <div>
-                                        {formData.hours.map((row, idx) => (
-                                            <div className="form-row" key={row.day}>
-                                                <label>{row.day}</label>
-                                                <input type="time" name={`hours-${idx}-open`} value={row.open} onChange={handleInputChange} required />
-                                                <input type="time" name={`hours-${idx}-close`} value={row.close} onChange={handleInputChange} required />
+                                {errors.location && <span className="error-text">{errors.location}</span>}
+                            </div>
+
+            
+                            {/* Opening/Closing Hours Section */}
+                            <div className="section">
+                                <h2 className="section-title">Opening & Closing Hours</h2>
+                                <p className="section-subtitle">Select your operating days and hours</p>
+                                
+                                <div className="hours-grid">
+                                    {formData.hours.map((row, idx) => (
+                                        <div className={`day-row ${!row.enabled ? 'disabled' : ''}`} key={row.day}>
+                                            <div className="day-checkbox">
+                                                <input 
+                                                    type="checkbox" 
+                                                    id={row.day.toLowerCase()}
+                                                    name={`hours-${idx}-enabled`}
+                                                    checked={row.enabled} 
+                                                    onChange={handleInputChange}
+                                                />
+                                                <label htmlFor={row.day.toLowerCase()}>{row.day}</label>
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div>
-                                        {/* Custom timetable UI: allow user to add/remove custom rows */}
-                                        {formData.customTimetableRows.map((row, idx) => (
-                                            <div className="form-row" key={idx}>
-                                                <input name={`customTimetableRows-${idx}-day`} value={row.day} onChange={handleInputChange} placeholder="Day" required />
-                                                <input type="time" name={`customTimetableRows-${idx}-open`} value={row.open} onChange={handleInputChange} required />
-                                                <input type="time" name={`customTimetableRows-${idx}-close`} value={row.close} onChange={handleInputChange} required />
-                                                <button type="button" onClick={() => {
-                                                    setFormData((prev) => {
-                                                        const customTimetableRows = prev.customTimetableRows.filter((_, i) => i !== idx);
-                                                        return { ...prev, customTimetableRows };
-                                                    });
-                                                }}>Remove</button>
+                                            <div className="time-inputs" id={`${row.day.toLowerCase()}-times`}>
+                                                <input 
+                                                    type="time" 
+                                                    name={`hours-${idx}-open`} 
+                                                    value={row.open} 
+                                                    onChange={handleInputChange}
+                                                    disabled={!row.enabled}
+                                                />
+                                                <span>to</span>
+                                                <input 
+                                                    type="time" 
+                                                    name={`hours-${idx}-close`} 
+                                                    value={row.close} 
+                                                    onChange={handleInputChange}
+                                                    disabled={!row.enabled}
+                                                />
                                             </div>
-                                        ))}
-                                        <button type="button" onClick={() => {
-                                            setFormData((prev) => ({
-                                                ...prev,
-                                                customTimetableRows: [
-                                                    ...prev.customTimetableRows,
-                                                    { day: '', open: '', close: '' }
-                                                ]
-                                            }));
-                                        }}>Add Custom Row</button>
-                                    </div>
-                                )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Menu Items Section (optional) */}
-                            <div className="form-section">
-                                <div className="section-header">
-                                    <h2>Menu Items (Optional)</h2>
+                            <div className="section">
+                                <h2 className="section-title">Menu Items (Optional)</h2>
+                                <p className="section-subtitle">Add your menu items to help customers discover your restaurant</p>
+                                
+                                <div id="menu-items">
+                                    {formData.menuItems.map((item, idx) => (
+                                        <div className="menu-item" key={idx}>
+                                            <button 
+                                                type="button"
+                                                className="remove-item-btn" 
+                                                onClick={() => handleRemoveMenuItem(idx)}
+                                            >
+                                                Remove
+                                            </button>
+                                            
+                                            <div className="menu-item-row">
+                                                <div className="form-field">
+                                                    <label>Item Name</label>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="e.g., Grilled Salmon"
+                                                        value={item.name} 
+                                                        onChange={e => handleMenuItemChange(idx, 'name', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="form-field">
+                                                    <label>Price</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        placeholder="€25.00"
+                                                        value={item.price} 
+                                                        onChange={e => handleMenuItemChange(idx, 'price', e.target.value)} 
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="form-field">
+                                                <label>Description</label>
+                                                <textarea 
+                                                    placeholder="Brief description of the dish..." 
+                                                    rows="2"
+                                                    value={item.description} 
+                                                    onChange={e => handleMenuItemChange(idx, 'description', e.target.value)}
+                                                />
+                                            </div>
+
+                                            <div className="form-field">
+                                                <label>Dietary Options</label>
+                                                <div className="dietary-options">
+                                                    <div className="dietary-option">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            id={`veg-${idx + 1}`}
+                                                            checked={item.is_vegetarian} 
+                                                            onChange={e => handleMenuItemChange(idx, 'is_vegetarian', e.target.checked)}
+                                                        />
+                                                        <label htmlFor={`veg-${idx + 1}`}>Vegetarian</label>
+                                                    </div>
+                                                    <div className="dietary-option">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            id={`vegan-${idx + 1}`}
+                                                            checked={item.is_vegan} 
+                                                            onChange={e => handleMenuItemChange(idx, 'is_vegan', e.target.checked)}
+                                                        />
+                                                        <label htmlFor={`vegan-${idx + 1}`}>Vegan</label>
+                                                    </div>
+                                                    <div className="dietary-option">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            id={`gf-${idx + 1}`}
+                                                            checked={item.is_gluten_free} 
+                                                            onChange={e => handleMenuItemChange(idx, 'is_gluten_free', e.target.checked)}
+                                                        />
+                                                        <label htmlFor={`gf-${idx + 1}`}>Gluten Free</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                                {formData.menuItems.map((item, idx) => (
-                                    <div className="form-row" key={idx}>
-                                        <input placeholder="Name" value={item.name} onChange={e => handleMenuItemChange(idx, 'name', e.target.value)} />
-                                        <input placeholder="Category" value={item.category} onChange={e => handleMenuItemChange(idx, 'category', e.target.value)} />
-                                        <input placeholder="Price" type="number" value={item.price} onChange={e => handleMenuItemChange(idx, 'price', e.target.value)} />
-                                        <textarea placeholder="Description" value={item.description} onChange={e => handleMenuItemChange(idx, 'description', e.target.value)} />
-                                        <label><input type="checkbox" checked={item.is_vegetarian} onChange={e => handleMenuItemChange(idx, 'is_vegetarian', e.target.checked)} />Vegetarian</label>
-                                        <label><input type="checkbox" checked={item.is_vegan} onChange={e => handleMenuItemChange(idx, 'is_vegan', e.target.checked)} />Vegan</label>
-                                        <label><input type="checkbox" checked={item.is_gluten_free} onChange={e => handleMenuItemChange(idx, 'is_gluten_free', e.target.checked)} />Gluten Free</label>
-                                        <button type="button" onClick={() => handleRemoveMenuItem(idx)}>Remove</button>
-                                    </div>
-                                ))}
-                                <button type="button" onClick={handleAddMenuItem}>Add Menu Item</button>
+
+                                <button type="button" className="add-item-btn" onClick={handleAddMenuItem}>
+                                    + Add Menu Item
+                                </button>
                             </div>
 
                             <div className="images-section">
@@ -400,30 +608,45 @@ const SimpleRestaurantForm = () => {
                                 <p>Create your account details</p>
                             </div>
 
-                            <div className="form-field">
-                                <label>Full Name</label>
-                                <input
-                                    type="text"
-                                    name="ownerName"
-                                    value={formData.ownerName}
-                                    onChange={handleInputChange}
-                                    placeholder="Enter your full name"
-                                    className={errors.ownerName ? 'error' : ''}
-                                />
-                                {errors.ownerName && <span className="error-text">{errors.ownerName}</span>}
+                            <div className="form-row">
+                                <div className="form-field">
+                                    <label>First Name</label>
+                                    <input
+                                        type="text"
+                                        name="ownerFirstName"
+                                        value={formData.ownerFirstName}
+                                        onChange={handleInputChange}
+                                        placeholder="Enter your first name"
+                                        className={errors.ownerFirstName ? 'error' : ''}
+                                    />
+                                    {errors.ownerFirstName && <span className="error-text">{errors.ownerFirstName}</span>}
+                                </div>
+
+                                <div className="form-field">
+                                    <label>Last Name</label>
+                                    <input
+                                        type="text"
+                                        name="ownerLastName"
+                                        value={formData.ownerLastName}
+                                        onChange={handleInputChange}
+                                        placeholder="Enter your last name"
+                                        className={errors.ownerLastName ? 'error' : ''}
+                                    />
+                                    {errors.ownerLastName && <span className="error-text">{errors.ownerLastName}</span>}
+                                </div>
                             </div>
 
                             <div className="form-field">
                                 <label>Email Address</label>
                                 <input
                                     type="email"
-                                    name="email"
-                                    value={formData.email}
+                                    name="ownerEmail"
+                                    value={formData.ownerEmail}
                                     onChange={handleInputChange}
                                     placeholder="Enter your email"
-                                    className={errors.email ? 'error' : ''}
+                                    className={errors.ownerEmail ? 'error' : ''}
                                 />
-                                {errors.email && <span className="error-text">{errors.email}</span>}
+                                {errors.ownerEmail && <span className="error-text">{errors.ownerEmail}</span>}
                             </div>
 
                             <div className="form-row">
@@ -431,13 +654,13 @@ const SimpleRestaurantForm = () => {
                                     <label>Password</label>
                                     <input
                                         type="password"
-                                        name="password"
-                                        value={formData.password}
+                                        name="ownerPassword"
+                                        value={formData.ownerPassword}
                                         onChange={handleInputChange}
                                         placeholder="Create a password"
-                                        className={errors.password ? 'error' : ''}
+                                        className={errors.ownerPassword ? 'error' : ''}
                                     />
-                                    {errors.password && <span className="error-text">{errors.password}</span>}
+                                    {errors.ownerPassword && <span className="error-text">{errors.ownerPassword}</span>}
                                 </div>
 
                                 <div className="form-field">

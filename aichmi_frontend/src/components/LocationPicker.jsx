@@ -52,35 +52,7 @@ const LocationPicker = ({ onLocationSelect, initialLocation = null }) => {
     language: 'en'
   });
 
-  // Initialize Autocomplete when map loads
-  useEffect(() => {
-    if (isLoaded && searchBoxRef.current && !autocomplete) {
-      const autocompleteService = new window.google.maps.places.Autocomplete(
-        searchBoxRef.current,
-        {
-          bounds: new window.google.maps.LatLngBounds(
-            new window.google.maps.LatLng(34.8, 19.3),
-            new window.google.maps.LatLng(41.8, 29.7)
-          ),
-          componentRestrictions: { country: 'gr' },
-          fields: ['place_id', 'geometry', 'name', 'formatted_address', 'address_components'],
-          types: ['establishment', 'geocode']
-        }
-      );
-
-      autocompleteService.addListener('place_changed', () => {
-        const place = autocompleteService.getPlace();
-        if (place.geometry && place.geometry.location) {
-          const lat = place.geometry.location.lat();
-          const lng = place.geometry.location.lng();
-          processPlace(place, lat, lng);
-        }
-      });
-
-      setAutocomplete(autocompleteService);
-    }
-  }, [isLoaded]);
-
+  // Define processPlace first
   const processPlace = useCallback((place, lat, lng) => {
     let island = '';
     let area = '';
@@ -128,6 +100,46 @@ const LocationPicker = ({ onLocationSelect, initialLocation = null }) => {
       map.setZoom(16);
     }
   }, [map]);
+
+  // Initialize Autocomplete when map loads
+  useEffect(() => {
+    if (isLoaded && searchBoxRef.current && !autocomplete) {
+      try {
+        const autocompleteService = new window.google.maps.places.Autocomplete(
+          searchBoxRef.current,
+          {
+            bounds: new window.google.maps.LatLngBounds(
+              new window.google.maps.LatLng(34.8, 19.3),
+              new window.google.maps.LatLng(41.8, 29.7)
+            ),
+            strictBounds: false,
+            componentRestrictions: { country: 'gr' },
+            fields: ['place_id', 'geometry', 'name', 'formatted_address', 'address_components'],
+            types: ['establishment', 'geocode']
+          }
+        );
+
+        autocompleteService.addListener('place_changed', () => {
+          const place = autocompleteService.getPlace();
+          console.log('Place selected:', place);
+          if (place.geometry && place.geometry.location) {
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            processPlace(place, lat, lng);
+          } else {
+            console.warn('No geometry found for place:', place);
+            setError('Please select a valid location from the dropdown');
+          }
+        });
+
+        setAutocomplete(autocompleteService);
+        console.log('Autocomplete initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize autocomplete:', error);
+        setError('Failed to initialize location search. Please try again.');
+      }
+    }
+  }, [isLoaded, processPlace]);
 
   const onLoad = useCallback((map) => {
     setMap(map);
