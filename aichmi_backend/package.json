@@ -30,6 +30,7 @@
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.16.3",
+    "pgvector": "^0.2.1",
     "stripe": "^18.3.0"
   },
   "devDependencies": {

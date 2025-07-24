@@ -55,7 +55,7 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       }
 
       const tableTypesRes = await db.query(
-        'SELECT table_type FROM table_inventory WHERE venue_id = $1 AND max_tables > 0',
+        'SELECT table_type FROM table_type_counts WHERE restaurant_id = $1 AND total_tables > 0',
         [restaurantId]
       );
       relevantData.availableTableTypes = tableTypesRes.map(row => row.table_type); 
@@ -65,9 +65,14 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       keywords.includes('table') ||
       keywords.includes('fee')
     ) {
-      const tableQuery = `SELECT * FROM tables ORDER BY table_price ASC`;
-      const tableResult = await db.query(tableQuery);
-      console.log('🔍 TABLE DATA FETCHED:', tableResult); // Add this debug line
+      // If we have a restaurant ID, only fetch tables for that restaurant
+      const tableQuery = restaurantId 
+        ? `SELECT * FROM tables WHERE restaurant_id = $1 ORDER BY table_price ASC`
+        : `SELECT * FROM tables ORDER BY table_price ASC`;
+      const tableResult = restaurantId 
+        ? await db.query(tableQuery, [restaurantId])
+        : await db.query(tableQuery);
+      console.log('🔍 TABLE DATA FETCHED:', tableResult);
       relevantData.generalInfo.tables = tableResult; 
     }
 
@@ -109,8 +114,12 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       keywords.includes('table') ||
       keywords.includes('fee')
     ) {
-      const tableQuery = `SELECT * FROM tables`;
-      const tableResult = await db.query(tableQuery);
+      const tableQuery = restaurantId 
+        ? `SELECT * FROM tables WHERE restaurant_id = $1 ORDER BY table_price ASC`
+        : `SELECT * FROM tables ORDER BY table_price ASC`;
+      const tableResult = restaurantId 
+        ? await db.query(tableQuery, [restaurantId])
+        : await db.query(tableQuery);
       relevantData.generalInfo.tables = tableResult; 
     }
 
@@ -261,22 +270,23 @@ export async function askGemini(prompt, history = [], restaurantId = null) {
   }
 
   let systemPrompt = `
-  You are AICHMI, an expert, friendly, and helpful AI assistant for restaurant reservations in Kos, Greece.
+  You are AICHMI, a friendly and helpful AI assistant for restaurant reservations in Kos, Greece.
   `;
 
   if (restaurantName) {
     systemPrompt += `
-    You are currently serving as the assistant for **${restaurantName}**.
-    If the user wants to make a reservation, it is always for **${restaurantName}**.
+    You are currently assisting with **${restaurantName}**.
+    If the user wants to make a reservation, it is for **${restaurantName}**.
     Never ask the user which restaurant they want; you already know it.
-    Answer as if you are an expert employee of this restaurant.
+    Be conversational, natural, and helpful - like chatting with a friend who knows about the restaurant.
     `;
   }
 
   systemPrompt += `
   **IMPORTANT INSTRUCTIONS:**
+  - Keep responses brief and to the point
   - Use the provided relevant information to answer questions accurately
-  - Always be polite, concise, and conversational
+  - Be friendly but concise - avoid long explanations unless specifically asked
   - If the user asks to make a reservation, ask for all necessary details (date, time, number of people, special requests and table type)
   - If the user asks about a restaurant, provide information using the data provided below
   - If the user asks for something you can't do, politely explain your limitations

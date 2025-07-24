@@ -218,9 +218,6 @@ INSERT INTO reservation (reservation_name, reservation_email, reservation_phone,
 -- Mykonos Paradise Restaurant reservations  
 ('Hans Mueller', 'hans.mueller@email.de', '+49-177-123-4567', CURRENT_DATE + INTERVAL '4 days', '21:00:00', 6, 'anniversary', 'honeymoon', FALSE, TRUE, 'Mykonos Grand Hotel', 2),
 
--- Santorini Sunset Taverna reservations
-('Sophie Laurent', 'sophie.laurent@email.fr', '+33-6-12-34-56-78', CURRENT_DATE + INTERVAL '5 days', '19:30:00', 3, 'standard', 'none', FALSE, FALSE, 'Oia Suites', 3),
-
 -- Rhodes Castle View reservations
 ('David Wilson', 'david.wilson@email.com', '+44-20-1234-5678', CURRENT_DATE + INTERVAL '6 days', '18:00:00', 2, 'grass', 'anniversary', TRUE, TRUE, NULL, 4);
 

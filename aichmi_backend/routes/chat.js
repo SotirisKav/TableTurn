@@ -1,32 +1,53 @@
 import express from 'express';
 import { askGemini } from '../services/AIService.js';
+import AgentOrchestrator from '../services/agents/AgentOrchestrator.js';
 
 const router = express.Router();
 
+// Initialize the multi-agent orchestrator
+const orchestrator = new AgentOrchestrator();
+
 router.post('/', async (req, res) => {
   try {
-    console.log('=== CHAT ROUTE CALLED ===');
+    console.log('=== MULTI-AGENT CHAT ROUTE CALLED ===');
     console.log('Request body:', req.body);
     
-    const { message, history = [], restaurantId = null } = req.body;
+    const { message, history = [], restaurantId = null, useMultiAgent = true } = req.body;
     
     if (!message) {
       console.log('No message provided');
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    console.log('Calling askGemini with:', { message, historyLength: history.length, restaurantId });
+    let result;
     
-    const result = await askGemini(message, history, restaurantId);
+    if (useMultiAgent) {
+      console.log('🎭 Using Multi-Agent System');
+      console.log('Processing with orchestrator:', { message, historyLength: history.length, restaurantId });
+      
+      result = await orchestrator.processMessage(message, history, restaurantId);
+      
+      console.log('=== MULTI-AGENT RESPONSE READY ===');
+      console.log('Active agent:', result.orchestrator?.agent);
+      console.log('Detected intent:', result.orchestrator?.intent);
+      console.log('Response type:', result.type);
+    } else {
+      console.log('🤖 Using Legacy Single-Agent System');
+      console.log('Calling askGemini with:', { message, historyLength: history.length, restaurantId });
+      
+      result = await askGemini(message, history, restaurantId);
+      
+      console.log('=== SINGLE-AGENT RESPONSE READY ===');
+      console.log('Response type:', result.type);
+    }
     
-    console.log('=== AI RESPONSE READY ===');
-    console.log('Response type:', result.type);
     console.log('Response to send to frontend:', result.response);
     
-    // Send the result as-is (it already has the correct structure)
+    // Send the result with timestamp
     res.json({
       ...result,
-      timestamp: new Date().toISOString()
+      timestamp: result.timestamp || new Date().toISOString(),
+      multiAgent: useMultiAgent
     });
     
     console.log('=== RESPONSE SENT ===');
@@ -34,7 +55,11 @@ router.post('/', async (req, res) => {
   } catch (error) {
     console.error('=== CHAT ROUTE ERROR ===');
     console.error('Chat error:', error);
-    res.status(500).json({ error: 'Failed to get AI response' });
+    res.status(500).json({ 
+      error: 'Failed to get AI response',
+      timestamp: new Date().toISOString(),
+      type: 'error'
+    });
   }
 });
 

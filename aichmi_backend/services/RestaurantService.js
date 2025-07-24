@@ -1,10 +1,44 @@
 import db from '../config/database.js';
 
 function toISODate(dateString) {
-  // Handles 'August 8, 2025' -> '2025-08-08'
-  const d = new Date(dateString);
+  if (!dateString) return null;
+  
+  // Handle various date formats and ensure current year if not specified
+  const currentYear = new Date().getFullYear();
+  let normalizedDate = dateString.trim();
+  
+  // Remove ordinal suffixes (st, nd, rd, th)
+  normalizedDate = normalizedDate.replace(/(\d+)(st|nd|rd|th)/g, '$1');
+  
+  // If the date string doesn't contain a year, append current year
+  if (!/\d{4}/.test(normalizedDate)) {
+    normalizedDate = `${normalizedDate}, ${currentYear}`;
+  }
+  
+  const d = new Date(normalizedDate);
   if (isNaN(d)) return null;
-  return d.toISOString().slice(0, 10);
+  
+  // Check if the parsed date is in the past, and if so, use next year
+  const today = new Date();
+  if (d < today && d.getFullYear() === currentYear) {
+    // If date has passed this year, assume user means next year
+    const nextYear = currentYear + 1;
+    normalizedDate = normalizedDate.replace(currentYear.toString(), nextYear.toString());
+    const nextYearDate = new Date(normalizedDate);
+    if (!isNaN(nextYearDate)) {
+      const year = nextYearDate.getFullYear();
+      const month = (nextYearDate.getMonth() + 1).toString().padStart(2, '0');
+      const day = nextYearDate.getDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+  
+  // Return in ISO format using local timezone to avoid timezone offset issues
+  const year = d.getFullYear();
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
 }
 
 class RestaurantService {
@@ -13,27 +47,23 @@ class RestaurantService {
         try {
             const query = `
                 SELECT 
-                    v.venue_id as id,
-                    v.name,
-                    v.address,
-                    v.area as location,
-                    v.type,
-                    v.rating,
-                    v.pricing as price_range,
-                    v.image_url as image,
-                    v.description,
-                    v.cuisine,
-                    o.phone,
-                    o.email as contact_email,
-                    CASE 
-                        WHEN v.pricing = 'expensive' THEN '€€€€'
-                        WHEN v.pricing = 'moderate' THEN '€€€'
-                        ELSE '€€'
-                    END as priceRange
-                FROM venue v
-                LEFT JOIN owners o ON v.venue_id = o.venue_id
-                WHERE v.type = 'restaurant'
-                ORDER BY v.rating DESC;
+                    r.restaurant_id as id,
+                    r.name,
+                    r.address,
+                    r.area as location,
+                    r.island,
+                    r.description,
+                    r.cuisine,
+                    r.phone,
+                    r.email as contact_email,
+                    r.profile_image_url as image,
+                    o.first_name,
+                    o.last_name,
+                    o.phone as owner_phone,
+                    o.email as owner_email
+                FROM restaurant r
+                LEFT JOIN owners o ON r.restaurant_id = o.restaurant_id
+                ORDER BY r.name;
             `;
             
             const result = await db.query(query);
@@ -49,27 +79,24 @@ class RestaurantService {
         try {
             const query = `
                 SELECT 
-                    v.venue_id as id,
-                    v.name,
-                    v.address,
-                    v.area as location,
-                    v.type,
-                    v.rating,
-                    v.pricing as price_range,
-                    v.image_url as image,
-                    v.description,
-                    v.cuisine,
-                    o.phone,
-                    o.email as contact_email,
-                    CONCAT(o.first_name, ' ', o.last_name) as owner_name,
-                    CASE 
-                        WHEN v.pricing = 'expensive' THEN '€€€€'
-                        WHEN v.pricing = 'moderate' THEN '€€€'
-                        ELSE '€€'
-                    END as priceRange
-                FROM venue v
-                LEFT JOIN owners o ON v.venue_id = o.venue_id
-                WHERE v.venue_id = $1 AND v.type = 'restaurant';
+                    r.restaurant_id as id,
+                    r.name,
+                    r.address,
+                    r.area as location,
+                    r.island,
+                    r.description,
+                    r.cuisine,
+                    r.phone,
+                    r.email as contact_email,
+                    r.profile_image_url as image,
+                    o.first_name,
+                    o.last_name,
+                    o.phone as owner_phone,
+                    o.email as owner_email,
+                    CONCAT(o.first_name, ' ', o.last_name) as owner_name
+                FROM restaurant r
+                LEFT JOIN owners o ON r.restaurant_id = o.restaurant_id
+                WHERE r.restaurant_id = $1;
             `;
             
             const result = await db.query(query, [id]);
@@ -81,8 +108,163 @@ class RestaurantService {
     }
 
     static async getRestaurantByName(name) {
-        const result = await db.query('SELECT * FROM venue WHERE name = $1', [name]);
+        const result = await db.query('SELECT * FROM restaurant WHERE name = $1', [name]);
         return result[0];
+    }
+
+    // Get restaurant owner information
+    static async getRestaurantOwner(restaurantId) {
+        try {
+            const query = `
+                SELECT 
+                    o.id,
+                    o.first_name,
+                    o.last_name,
+                    o.phone,
+                    o.email,
+                    CONCAT(o.first_name, ' ', o.last_name) as name
+                FROM owners o
+                WHERE o.restaurant_id = $1;
+            `;
+            
+            const result = await db.query(query, [restaurantId]);
+            return result[0] || null;
+        } catch (error) {
+            console.error('Error fetching restaurant owner:', error);
+            throw error;
+        }
+    }
+
+    // Get restaurant hours for a specific restaurant
+    static async getRestaurantHours(restaurantId) {
+        try {
+            const query = `
+                SELECT 
+                    day_of_week,
+                    open_time,
+                    close_time
+                FROM restaurant_hours
+                WHERE restaurant_id = $1
+                ORDER BY 
+                    CASE day_of_week
+                        WHEN 'Monday' THEN 1
+                        WHEN 'Tuesday' THEN 2
+                        WHEN 'Wednesday' THEN 3
+                        WHEN 'Thursday' THEN 4
+                        WHEN 'Friday' THEN 5
+                        WHEN 'Saturday' THEN 6
+                        WHEN 'Sunday' THEN 7
+                    END;
+            `;
+            
+            const result = await db.query(query, [restaurantId]);
+            return result;
+        } catch (error) {
+            console.error('Error fetching restaurant hours:', error);
+            throw error;
+        }
+    }
+
+    // Get menu items for a specific restaurant
+    static async getMenuItems(restaurantId) {
+        try {
+            const query = `
+                SELECT 
+                    menu_item_id,
+                    name,
+                    description,
+                    price,
+                    category,
+                    is_vegetarian,
+                    is_vegan,
+                    is_gluten_free,
+                    available
+                FROM menu_item
+                WHERE restaurant_id = $1 AND available = true
+                ORDER BY category, name;
+            `;
+            
+            const result = await db.query(query, [restaurantId]);
+            return result;
+        } catch (error) {
+            console.error('Error fetching menu items:', error);
+            throw error;
+        }
+    }
+
+    // Get fully booked dates for a specific restaurant
+    static async getFullyBookedDates(restaurantId) {
+        try {
+            const query = `
+                SELECT 
+                    fully_booked_dates
+                FROM fully_booked_dates
+                WHERE restaurant_id = $1;
+            `;
+            
+            const result = await db.query(query, [restaurantId]);
+            
+            // Extract dates from the array and filter future dates
+            if (result.length > 0 && result[0].fully_booked_dates) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const futureDates = result[0].fully_booked_dates
+                    .filter(date => new Date(date) >= today)
+                    .sort((a, b) => new Date(a) - new Date(b));
+                    
+                return futureDates.map(date => ({ fully_booked_date: date }));
+            }
+            
+            return [];
+        } catch (error) {
+            console.error('Error fetching fully booked dates:', error);
+            throw error;
+        }
+    }
+
+    // Get table inventory for a specific restaurant
+    static async getTableInventory(restaurantId) {
+        try {
+            const query = `
+                SELECT 
+                    table_type,
+                    table_price,
+                    COUNT(*) as total_tables
+                FROM tables
+                WHERE restaurant_id = $1
+                GROUP BY table_type, table_price
+                ORDER BY table_type;
+            `;
+            
+            const result = await db.query(query, [restaurantId]);
+            return result.rows || [];
+        } catch (error) {
+            console.error('Error fetching table inventory:', error);
+            // Return empty array if tables don't exist
+            return [];
+        }
+    }
+
+    // Get table types for a specific restaurant (for menu pricing agent)
+    static async getTableTypes(restaurantId) {
+        try {
+            const query = `
+                SELECT 
+                    table_type,
+                    table_price as price_per_person
+                FROM tables
+                WHERE restaurant_id = $1
+                GROUP BY table_type, table_price
+                ORDER BY table_type;
+            `;
+            
+            const result = await db.query(query, [restaurantId]);
+            return result.rows || [];
+        } catch (error) {
+            console.error('Error fetching table types:', error);
+            return [];
+        }
     }
 
     // Check if a restaurant is fully booked on a specific date
@@ -102,22 +284,7 @@ class RestaurantService {
         }
     }
 
-    // Get available table types and prices
-    static async getTableTypes() {
-        try {
-            const query = `
-                SELECT table_type, table_price
-                FROM tables
-                ORDER BY table_price ASC;
-            `;
-            
-            const result = await db.query(query);
-            return result;
-        } catch (error) {
-            console.error('Error fetching table types:', error);
-            throw error;
-        }
-    }
+
 
     // Get menu items for a specific restaurant by venue_id
     static async getMenuItemsByVenueId(venueId) {
@@ -146,44 +313,25 @@ class RestaurantService {
     
     // Check if a table of a given type is available for a venue on a specific date
     static async isTableAvailable({ venueId, tableType, reservationDate }) {
-        // 1. Get max tables for this type
+        // 1. Get max tables for this type from the table_type_counts view
         const invRes = await db.query(
-          'SELECT max_tables FROM table_inventory WHERE venue_id = $1 AND table_type = $2',
+          'SELECT total_tables FROM table_type_counts WHERE restaurant_id = $1 AND table_type = $2',
           [venueId, tableType]
         );
         if (invRes.length === 0) {
-          throw new Error('No inventory set for this table type at this venue.');
+          throw new Error(`No tables of type "${tableType}" available at this restaurant.`);
         }
-        const maxTables = invRes[0].max_tables;
+        const maxTables = invRes[0].total_tables;
 
         // 2. Count existing reservations for this type
         const resRes = await db.query(
-          'SELECT COUNT(*) FROM reservation WHERE venue_id = $1 AND table_type = $2 AND reservation_date = $3',
+          'SELECT COUNT(*) FROM reservation WHERE restaurant_id = $1 AND table_type = $2 AND reservation_date = $3',
           [venueId, tableType, reservationDate]
         );
         const reservedCount = Number(resRes[0].count);
 
-        // 3. For grass tables, subtract 2 for each special table booked
-        let grassAdjustment = 0;
-        if (tableType === 'grass') {
-          const specialRes = await db.query(
-            'SELECT COUNT(*) FROM reservation WHERE venue_id = $1 AND table_type = $2 AND reservation_date = $3',
-            [venueId, 'special', reservationDate]
-          );
-          grassAdjustment = Number(specialRes[0].count) * 2;
-        }
-
-        // 4. For special tables, ensure no more than 2 are booked
-        if (tableType === 'special' && reservedCount >= 2) {
-          return false;
-        }
-
-        // 5. Check if available
-        if (tableType === 'grass') {
-          return (reservedCount + grassAdjustment) < maxTables;
-        } else {
-          return reservedCount < maxTables;
-        }
+        // 3. Check if available
+        return reservedCount < maxTables;
     }
     
     static async createReservation({
@@ -231,7 +379,7 @@ class RestaurantService {
           flowers_price,
           hotel_name,
           hotel_id,
-          venue_id
+          restaurant_id
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         RETURNING *;
       `;

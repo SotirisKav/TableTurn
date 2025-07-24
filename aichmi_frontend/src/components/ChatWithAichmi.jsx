@@ -55,59 +55,35 @@ function ChatWithAichmi() {
             // Add AI message to chat
             setMessages(msgs => [...msgs, { sender: 'ai', text: data.response }]);
 
-            // Check if this is a redirect response (new logic)
+            // Check if this is a redirect response (reservation has been created by the agent)
             if (data.type === 'redirect' && data.reservationDetails) {
                 console.log('Redirect detected, reservation details:', data.reservationDetails);
                 
-                // Convert the reservation details to the format expected by your reservation API
-                const reservationData = {
-                    venueId: data.reservationDetails.restaurantId || Number(restaurantId),
-                    reservationName: data.reservationDetails.name,
-                    reservationEmail: data.reservationDetails.email,
-                    reservationPhone: data.reservationDetails.phone,
-                    date: data.reservationDetails.date,
-                    time: data.reservationDetails.time,
-                    guests: Number(data.reservationDetails.partySize),
-                    tableType: data.reservationDetails.tableType,
-                    // Fix these null value mappings:
-                    celebrationType: data.reservationDetails.celebrationType === 'None' || 
-                                    data.reservationDetails.celebrationType === 'null' || 
-                                    !data.reservationDetails.celebrationType ? null : data.reservationDetails.celebrationType,
-                    cake: data.reservationDetails.cake === true || data.reservationDetails.cake === 'true',
-                    cakePrice: data.reservationDetails.cakePrice || 0,
-                    flowers: data.reservationDetails.flowers === true || data.reservationDetails.flowers === 'true',
-                    flowersPrice: data.reservationDetails.flowersPrice || 0,
-                    hotelName: data.reservationDetails.hotelName === 'None' || 
-                               data.reservationDetails.hotelName === 'null' || 
-                               !data.reservationDetails.hotelName ? null : data.reservationDetails.hotelName,
-                    hotelId: data.reservationDetails.hotelId === 'null' || 
-                             data.reservationDetails.hotelId === '0' || 
-                             !data.reservationDetails.hotelId ? null : Number(data.reservationDetails.hotelId),
-                    specialRequests: data.reservationDetails.specialRequests === 'None' || 
-                                    data.reservationDetails.specialRequests === 'null' || 
-                                    !data.reservationDetails.specialRequests ? null : data.reservationDetails.specialRequests
-                };
+                // Check if reservation was successfully created
+                if (data.reservationDetails.success) {
+                    // Prepare data for confirmation page
+                    const confirmationData = {
+                        restaurantName: data.reservationDetails.restaurant.name,
+                        reservationId: data.reservationDetails.reservationId,
+                        customerName: data.reservationDetails.customer.name,
+                        customerEmail: data.reservationDetails.customer.email,
+                        customerPhone: data.reservationDetails.customer.phone,
+                        date: data.reservationDetails.reservation.date,
+                        time: data.reservationDetails.reservation.time,
+                        guests: data.reservationDetails.reservation.partySize,
+                        tableType: data.reservationDetails.reservation.tableType,
+                        success: true
+                    };
 
-                console.log('Sending reservation data to API:', reservationData);
-                
-                // Send to reservation API
-                const reservationResponse = await fetch('/api/reservation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(reservationData)
-                });
-                
-                const reservationResult = await reservationResponse.json();
-                console.log('Reservation API response:', reservationResult);
-                
-                if (reservationResponse.ok) {
-                    // Navigate to confirmation page
-                    navigate('/confirmation', { state: reservationData });
+                    console.log('Navigating to confirmation page with:', confirmationData);
+                    
+                    // Navigate to confirmation page with reservation details
+                    navigate('/confirmation', { state: confirmationData });
                 } else {
-                    // Handle reservation error
+                    // Handle reservation creation error
                     setMessages(msgs => [...msgs, { 
                         sender: 'ai', 
-                        text: `Sorry, there was an error saving your reservation: ${reservationResult.error || 'Unknown error'}` 
+                        text: 'Sorry, there was an issue creating your reservation. Please try again or contact us directly.' 
                     }]);
                 }
                 return;

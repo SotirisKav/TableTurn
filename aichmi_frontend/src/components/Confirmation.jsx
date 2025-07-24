@@ -36,7 +36,15 @@ function Confirmation() {
         <div className="confirmation-content">
           <div className="confirmation-header">
             <h1>Thank you for your reservation!</h1>
-            <p>Your table has been successfully booked.</p>
+            {state.restaurantName && (
+              <h2>Your table at {state.restaurantName} has been successfully booked! 🎉</h2>
+            )}
+            {!state.restaurantName && (
+              <p>Your table has been successfully booked.</p>
+            )}
+            {state.reservationId && (
+              <p className="reservation-id">Reservation ID: <strong>#{state.reservationId}</strong></p>
+            )}
           </div>
 
           <div className="reservation-summary">
@@ -45,17 +53,17 @@ function Confirmation() {
             <div className="detail-grid">
               <div className="detail-item">
                 <span>Name</span>
-                <span>{state.reservationName || state.name}</span>
+                <span>{state.customerName || state.reservationName || state.name}</span>
               </div>
               
               <div className="detail-item">
                 <span>Email</span>
-                <span>{state.reservationEmail || state.email}</span>
+                <span>{state.customerEmail || state.reservationEmail || state.email}</span>
               </div>
               
               <div className="detail-item">
                 <span>Phone</span>
-                <span>{state.reservationPhone || state.phone}</span>
+                <span>{state.customerPhone || state.reservationPhone || state.phone}</span>
               </div>
               
               <div className="detail-item">
@@ -88,7 +96,7 @@ function Confirmation() {
           </div>
 
           <div className="confirmation-info">
-            <p>A confirmation email has been sent to <strong>{state.reservationEmail || state.email}</strong></p>
+            <p>A confirmation email has been sent to <strong>{state.customerEmail || state.reservationEmail || state.email}</strong></p>
             <p>For any changes, please call us at <strong>+30 224 102 7000</strong></p>
           </div>
 

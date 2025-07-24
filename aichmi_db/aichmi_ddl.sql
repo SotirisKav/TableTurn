@@ -1,8 +1,5 @@
-DROP DATABASE IF EXISTS aichmi;
-CREATE DATABASE aichmi;
-
--- Connect to the new database
-\c aichmi
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
 
 DROP TABLE IF EXISTS response_templates CASCADE;
 DROP TABLE IF EXISTS restaurant_hours CASCADE;
@@ -40,7 +37,8 @@ CREATE TABLE restaurant (
     profile_image_url VARCHAR(500), 
     background_image_url VARCHAR(500),
     description TEXT,
-    cuisine VARCHAR(100)
+    cuisine VARCHAR(100),
+    embedding vector(768)
 );
 
 CREATE TABLE restaurant_hours (
@@ -117,6 +115,8 @@ CREATE TABLE tables (
     table_id SERIAL PRIMARY KEY,
     table_type TEXT,
     table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0),
+    description TEXT,
+    embedding vector(768),
     restaurant_id INT NOT NULL,
     FOREIGN KEY (restaurant_id) REFERENCES restaurant(restaurant_id) ON DELETE CASCADE
 );
@@ -131,7 +131,8 @@ CREATE TABLE menu_item (
     is_vegetarian BOOLEAN DEFAULT FALSE,
     is_vegan BOOLEAN DEFAULT FALSE,
     is_gluten_free BOOLEAN DEFAULT FALSE,
-    available BOOLEAN DEFAULT TRUE
+    available BOOLEAN DEFAULT TRUE,
+    embedding vector(768)
 );
 
 CREATE TABLE reservation (
@@ -200,6 +201,11 @@ CREATE INDEX IF NOT EXISTS idx_owners_stripe_customer ON owners(stripe_customer_
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_owner ON refresh_tokens(owner_id);
 CREATE INDEX IF NOT EXISTS idx_reservation_venue ON reservation(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_reservation_date ON reservation(reservation_date);
+
+-- Create vector indexes for similarity search
+CREATE INDEX IF NOT EXISTS idx_restaurant_embedding ON restaurant USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_tables_embedding ON tables USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);  
+CREATE INDEX IF NOT EXISTS idx_menu_item_embedding ON menu_item USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 CREATE VIEW table_type_counts AS
 SELECT 
