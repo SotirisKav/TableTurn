@@ -11,6 +11,7 @@ import restaurantRegistrationRouter from './routes/restaurantRegistration.js';
 import locationRoutes from './routes/location.js';
 import multiAgentTestRouter from './routes/multiAgentTest.js';
 import multiAgentWorkflowRouter from './routes/multiAgentWorkflow.js';
+import dashboardRouter from './routes/dashboard.js';
 
 dotenv.config();
 
@@ -101,6 +102,9 @@ app.use('/api/multiagent', multiAgentTestRouter);
 
 // Multi-Agent Workflow Route
 app.use('/api/workflow', multiAgentWorkflowRouter);
+
+// Dashboard Route
+app.use('/api/dashboard', dashboardRouter);
 
 // Legacy EJS route (for backward compatibility)
 app.get('/legacy', (req, res) => {

@@ -3,12 +3,29 @@ import { useState, useEffect } from 'react';
 
 function Header() {
     const [user, setUser] = useState(null);
+    const [userInfo, setUserInfo] = useState(null);
 
     useEffect(() => {
         // Check if user is logged in
         const userData = localStorage.getItem('user');
-        if (userData) {
+        const token = localStorage.getItem('accessToken');
+        
+        if (userData && token) {
             setUser(JSON.parse(userData));
+            
+            // Fetch additional user info for dashboard access
+            fetch('/api/dashboard/user-info', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.error) {
+                    setUserInfo(data);
+                }
+            })
+            .catch(console.error);
         }
     }, []);
 
@@ -29,9 +46,14 @@ function Header() {
                 <li><Link to="/">Home</Link></li>
                 <li><Link to="/browse-restaurants">Browse Restaurants</Link></li>
                 <li><Link to="/about">About</Link></li>
-                {user ? (
+                {user && userInfo ? (
                   <>
-                    <li><Link to="/dashboard">Dashboard</Link></li>
+                    <li>
+                      <Link to={`/dashboard/${userInfo.restaurantId}`} className="nav-dashboard">
+                        Dashboard
+                        {userInfo.role === 'admin' && <span className="admin-badge">Admin</span>}
+                      </Link>
+                    </li>
                     <li>
                       <button onClick={handleLogout} className="nav-logout-btn">
                         Log Out

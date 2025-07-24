@@ -15,7 +15,7 @@ export const authenticateToken = async (req, res, next) => {
         
         // Check if owner still exists
         const [owners] = await db.execute(
-            'SELECT * FROM owners WHERE id = ?',
+            'SELECT * FROM owners WHERE id = $1',
             [decoded.id]
         );
 
@@ -44,6 +44,44 @@ export const authorizeVenue = async (req, res, next) => {
         
         next();
     } catch (error) {
+        return res.status(500).json({ error: 'Authorization check failed' });
+    }
+};
+
+// Check dashboard access - owners can only view their restaurant, admin (user ID 1) can view any
+export const checkDashboardAccess = async (req, res, next) => {
+    try {
+        const requestedRestaurantId = parseInt(req.params.restaurantId);
+        const userRestaurantId = req.user.restaurantId;
+        const userId = req.user.id;
+        
+        // Check if user exists
+        const [owners] = await db.execute(
+            'SELECT id FROM owners WHERE id = $1',
+            [userId]
+        );
+
+        if (owners.length === 0) {
+            return res.status(403).json({ error: 'User not found' });
+        }
+
+        // Admin can access any restaurant dashboard (ONLY user ID 6 - Sotiris)
+        if (userId === 6) {
+            req.user.role = 'admin';
+            return next();
+        }
+
+        // Owner can only access their own restaurant dashboard
+        if (userRestaurantId === requestedRestaurantId) {
+            req.user.role = 'owner';
+            return next();
+        }
+
+        return res.status(403).json({ 
+            error: 'Access denied. You can only view your own restaurant dashboard.' 
+        });
+    } catch (error) {
+        console.error('Dashboard auth error:', error);
         return res.status(500).json({ error: 'Authorization check failed' });
     }
 };

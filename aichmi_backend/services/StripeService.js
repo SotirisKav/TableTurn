@@ -28,8 +28,8 @@ class StripeService {
         
         await db.execute(
             `UPDATE owners 
-             SET stripe_customer_id = ?, stripe_subscription_id = ?, subscription_status = ?
-             WHERE id = ?`,
+             SET stripe_customer_id = $1, stripe_subscription_id = $2, subscription_status = $3
+             WHERE id = $4`,
             [customerId, subscriptionId, status, ownerId]
         );
     }
@@ -60,14 +60,14 @@ class StripeService {
 
     async updateSubscriptionStatus(subscription) {
         await db.execute(
-            'UPDATE owners SET subscription_status = ? WHERE stripe_subscription_id = ?',
+            'UPDATE owners SET subscription_status = $1 WHERE stripe_subscription_id = $2',
             [subscription.status, subscription.id]
         );
     }
 
     async cancelSubscription(subscription) {
         await db.execute(
-            'UPDATE owners SET subscription_status = ? WHERE stripe_subscription_id = ?',
+            'UPDATE owners SET subscription_status = $1 WHERE stripe_subscription_id = $2',
             ['canceled', subscription.id]
         );
     }

@@ -34,7 +34,7 @@ class AuthService {
         try {
             // Check if email already exists
             const [existing] = await db.execute(
-                'SELECT id FROM owners WHERE email = ?',
+                'SELECT id FROM owners WHERE email = $1',
                 [email]
             );
 
@@ -48,11 +48,11 @@ class AuthService {
             // Insert new owner
             const [result] = await db.execute(
                 `INSERT INTO owners (email, password, first_name, last_name, phone, oauth_provider, oauth_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
                 [email, hashedPassword, firstName, lastName, phone, oauthProvider, oauthId]
             );
 
-            return result.insertId;
+            return result[0].id;
         } catch (error) {
             throw new Error(`Failed to create owner: ${error.message}`);
         }
@@ -62,10 +62,10 @@ class AuthService {
     async loginOwner(email, password) {
         try {
             const [owners] = await db.execute(
-                `SELECT o.*, v.name as venue_name 
+                `SELECT o.*, r.name as venue_name 
                  FROM owners o 
-                 LEFT JOIN venue v ON o.restaurant_id = v.venue_id 
-                 WHERE o.email = ?`,
+                 LEFT JOIN restaurant r ON o.restaurant_id = r.restaurant_id 
+                 WHERE o.email = $1`,
                 [email]
             );
 
@@ -115,7 +115,7 @@ class AuthService {
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
         
         await db.execute(
-            'INSERT INTO refresh_tokens (token, owner_id, expires_at) VALUES (?, ?, ?)',
+            'INSERT INTO refresh_tokens (token, owner_id, expires_at) VALUES ($1, $2, $3)',
             [token, ownerId, expiresAt]
         );
     }
@@ -128,7 +128,7 @@ class AuthService {
             
             // Check if refresh token exists in database
             const [tokens] = await db.execute(
-                'SELECT * FROM refresh_tokens WHERE token = ? AND owner_id = ? AND expires_at > NOW()',
+                'SELECT * FROM refresh_tokens WHERE token = $1 AND owner_id = $2 AND expires_at > NOW()',
                 [refreshToken, decoded.id]
             );
 
@@ -157,7 +157,7 @@ class AuthService {
     // Logout (invalidate refresh token)
     async logout(refreshToken) {
         await db.execute(
-            'DELETE FROM refresh_tokens WHERE token = ?',
+            'DELETE FROM refresh_tokens WHERE token = $1',
             [refreshToken]
         );
     }

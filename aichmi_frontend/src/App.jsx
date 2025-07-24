@@ -35,7 +35,7 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/subscriptions" element={<Subscriptions />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/:restaurantId" element={<Dashboard />} />
         <Route path="/restaurant-setup" element={<SimpleRestaurantForm />} />
       </Routes>
       <Footer />
