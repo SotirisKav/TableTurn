@@ -110,8 +110,20 @@ class ReservationAgent extends BaseAgent {
                     );
                 }
                 try {
+                    // Map table type to available types
+                    const availableTypes = reservationData.tableTypes || [];
+                    let mappedTableType = reservationDetails.reservation.tableType || 'standard';
+                    
+                    // Validate table type exists
+                    const tableExists = availableTypes.some(t => t.table_type.toLowerCase() === mappedTableType.toLowerCase());
+                    if (!tableExists && mappedTableType !== 'standard') {
+                        // Try to map user request to available type
+                        mappedTableType = this.mapTableTypeRequest(mappedTableType, availableTypes);
+                        console.log(`🔄 Mapped table type "${reservationDetails.reservation.tableType}" to "${mappedTableType}"`);
+                    }
+                    
                     // Extract reservation data from the structured format
-                    const reservationData = {
+                    const createReservationData = {
                         venueId: reservationDetails.restaurant.id || restaurantId,
                         reservationName: reservationDetails.customer.name || reservationDetails.customer.name?.trim(),
                         reservationEmail: reservationDetails.customer.email || reservationDetails.customer.email?.trim(),
@@ -119,7 +131,7 @@ class ReservationAgent extends BaseAgent {
                         date: reservationDetails.reservation.date,
                         time: reservationDetails.reservation.time || '19:00',
                         guests: reservationDetails.reservation.partySize,
-                        tableType: reservationDetails.reservation.tableType || 'standard',
+                        tableType: mappedTableType,
                         celebrationType: reservationDetails.addOns.celebration,
                         cake: reservationDetails.addOns.cake,
                         cakePrice: 0,
@@ -131,7 +143,7 @@ class ReservationAgent extends BaseAgent {
                     };
 
                     // Create the reservation in the database
-                    const createdReservation = await RestaurantService.createReservation(reservationData);
+                    const createdReservation = await RestaurantService.createReservation(createReservationData);
                     
                     console.log('✅ Reservation created successfully:', createdReservation);
                     
@@ -202,6 +214,9 @@ class ReservationAgent extends BaseAgent {
     buildSystemPrompt(reservationData) {
         const { restaurant, tableTypes, fullyBookedDates, semanticTables, hasSemanticMatch } = reservationData;
         
+        // Get available table type names for mapping
+        const availableTableNames = tableTypes.map(t => t.table_type).join(', ');
+        
         return `You are AICHMI, a friendly reservation assistant for ${restaurant.name}. Help guests make reservations efficiently and naturally.
 
 CURRENT DATE: ${new Date().toISOString().slice(0, 10)} (${new Date().getFullYear()})
@@ -211,8 +226,14 @@ PERSONALITY:
 - Collect information systematically without repetitive confirmations
 - Only ask for final confirmation ONCE when you have ALL required details
 
-TABLES & PRICING:
+AVAILABLE TABLE TYPES & PRICING:
 ${tableTypes.map(table => `- ${table.table_type}: €${table.table_price || 0}`).join('\n')}
+
+IMPORTANT TABLE TYPE MAPPING:
+- When users ask for "table with a view", "outdoor", "outside" → use available types: ${availableTableNames}
+- When users ask for "standard", "regular", "inside" → use first available standard type
+- ONLY use table types that exist in the list above
+- If user request doesn't match exactly, choose the closest available type
 
 ${fullyBookedDates.length > 0 ? `UNAVAILABLE: ${fullyBookedDates.map(d => d.date).join(', ')}` : ''}
 
@@ -221,7 +242,7 @@ ${semanticTables.slice(0,3).map(table => `- ${table.table_type}: €${table.tabl
 
 RESERVATION FLOW:
 1. Collect date and party size first
-2. Ask about table preferences or default to standard table (€0 fee)
+2. Ask about table preferences using ONLY the available table types listed above
 3. When they choose a table, ask for contact details (name, email, phone)
 4. After getting ALL details, give ONE final summary and ask for confirmation
 5. CRITICAL: When they confirm with "yes", "correct", "ok", or similar, you MUST immediately generate the reservation data below. Do not say "I have finalized the reservation" without actually generating the data block. Never claim to have created a reservation without outputting the JSON block below.
@@ -232,13 +253,49 @@ MANDATORY: After confirmation, output this exact format:
 {
   "restaurant": {"id": ${restaurant.restaurant_id || 'null'}, "name": "${restaurant.name || ''}"},
   "customer": {"name": "[name]", "email": "[email]", "phone": "[phone]"},
-  "reservation": {"date": "[YYYY-MM-DD format, use ${new Date().getFullYear()} for current year, next year ${new Date().getFullYear() + 1} for past dates]", "time": "[time in 24h format like 21:00 for 9pm]", "partySize": [number], "tableType": "[type, default to 'standard' if not specified]"},
+  "reservation": {"date": "[YYYY-MM-DD format, use ${new Date().getFullYear()} for current year, next year ${new Date().getFullYear() + 1} for past dates]", "time": "[time in 24h format like 21:00 for 9pm]", "partySize": [number], "tableType": "[MUST be one of: ${availableTableNames}]"},
   "addOns": {"celebration": null, "cake": false, "flowers": false},
   "transfer": {"needed": false, "hotel": null}
 }
 [/RESERVATION_DATA]
 
 CRITICAL RULE: You MUST generate this data block immediately after confirmation. Never say "I have finalized the reservation" or "reservation created" without outputting the JSON block above. The reservation is NOT created until you output the structured data. Do not end conversations claiming success without generating the [RESERVATION_DATA] block!`;
+    }
+
+    // Map user-friendly table requests to actual table types
+    mapTableTypeRequest(userRequest, availableTypes) {
+        const lowerRequest = userRequest.toLowerCase();
+        
+        // Create mapping based on keywords and available types
+        const mapping = {
+            'view': ['terrace', 'outdoor', 'garden', 'grass', 'balcony'],
+            'outside': ['terrace', 'outdoor', 'garden', 'grass', 'balcony'],
+            'outdoor': ['terrace', 'outdoor', 'garden', 'grass', 'balcony'],
+            'garden': ['garden', 'grass', 'terrace', 'outdoor'],
+            'terrace': ['terrace', 'garden', 'grass', 'outdoor'],
+            'inside': ['standard', 'indoor', 'regular'],
+            'indoor': ['standard', 'indoor', 'regular'],
+            'regular': ['standard', 'regular', 'normal'],
+            'standard': ['standard', 'regular', 'normal'],
+            'private': ['private', 'vip', 'reserved'],
+            'romantic': ['romantic', 'private', 'intimate', 'grass', 'garden'],
+            'quiet': ['private', 'intimate', 'corner', 'grass', 'garden']
+        };
+        
+        // Find best match
+        for (const [keyword, candidates] of Object.entries(mapping)) {
+            if (lowerRequest.includes(keyword)) {
+                // Return first available candidate type
+                for (const candidate of candidates) {
+                    if (availableTypes.some(t => t.table_type.toLowerCase() === candidate)) {
+                        return availableTypes.find(t => t.table_type.toLowerCase() === candidate).table_type;
+                    }
+                }
+            }
+        }
+        
+        // Default fallback - return first available type or 'standard'
+        return availableTypes.length > 0 ? availableTypes[0].table_type : 'standard';
     }
 
     buildPrompt(message, conversationHistory, reservationData) {
