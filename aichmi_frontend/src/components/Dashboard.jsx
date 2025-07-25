@@ -9,6 +9,7 @@ function Dashboard() {
     const [activeTab, setActiveTab] = useState('tier1');
     const [dashboardData, setDashboardData] = useState(null);
     const [userInfo, setUserInfo] = useState(null);
+    const [restaurantInfo, setRestaurantInfo] = useState(null);
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('accessToken');
@@ -26,6 +27,9 @@ function Dashboard() {
                 });
                 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error('Please log in to access the dashboard.');
+                    }
                     throw new Error('Failed to fetch user info');
                 }
                 
@@ -36,6 +40,13 @@ function Dashboard() {
                 if (data.role !== 'admin' && data.restaurantId !== parseInt(restaurantId)) {
                     setError('Access denied. You can only view your own restaurant dashboard.');
                     return;
+                }
+
+                // Fetch restaurant info
+                const restaurantResponse = await fetch(`/api/restaurants/${restaurantId}`);
+                if (restaurantResponse.ok) {
+                    const restaurantData = await restaurantResponse.json();
+                    setRestaurantInfo(restaurantData);
                 }
                 
             } catch (err) {
@@ -60,12 +71,17 @@ function Dashboard() {
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to fetch ${tier} data`);
+                if (response.status === 401) {
+                    throw new Error('Authentication required. Please log in.');
+                }
+                throw new Error(`Failed to fetch ${tier} data: ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('Dashboard data received:', data); // Debug log
             setDashboardData(data);
         } catch (err) {
+            console.error('Dashboard fetch error:', err); // Debug log
             setError(err.message);
         } finally {
             setLoading(false);
@@ -80,43 +96,45 @@ function Dashboard() {
     const renderTier1Dashboard = () => {
         if (!dashboardData) return null;
 
-        const { todaySnapshot, weeklyDemand, alerts } = dashboardData;
+        const { todaySnapshot = {}, weeklyDemand = [], alerts = [] } = dashboardData;
 
         return (
             <div className="dashboard-tier1">
                 <div className="snapshot-cards">
                     <div className="snapshot-card">
                         <h3>Reservations Today</h3>
-                        <div className="snapshot-number">{todaySnapshot.reservationsToday}</div>
+                        <div className="snapshot-number">{todaySnapshot?.reservationsToday || 0}</div>
                     </div>
                     <div className="snapshot-card">
                         <h3>Total Guests Today</h3>
-                        <div className="snapshot-number">{todaySnapshot.totalGuestsToday}</div>
+                        <div className="snapshot-number">{todaySnapshot?.totalGuestsToday || 0}</div>
                     </div>
                     <div className="snapshot-card">
                         <h3>Projected Occupancy</h3>
-                        <div className="snapshot-number">{todaySnapshot.projectedOccupancy}%</div>
+                        <div className="snapshot-number">{todaySnapshot?.projectedOccupancy || 0}%</div>
                     </div>
                 </div>
 
                 <div className="weekly-demand">
                     <h3>Next 7 Days Demand</h3>
                     <div className="demand-chart">
-                        {weeklyDemand.map((day, index) => (
+                        {weeklyDemand && weeklyDemand.length > 0 ? weeklyDemand.map((day, index) => (
                             <div key={index} className="demand-bar">
                                 <div className="bar" style={{height: `${Math.max(day.reservation_count * 10, 20)}px`}}>
                                     <span className="bar-value">{day.reservation_count}</span>
                                 </div>
                                 <div className="bar-label">{formatDate(day.date)}</div>
                             </div>
-                        ))}
+                        )) : (
+                            <div className="no-data">No demand data available</div>
+                        )}
                     </div>
                 </div>
 
                 <div className="alerts-section">
                     <h3>Recent Alerts & Notifications</h3>
                     <div className="alerts-list">
-                        {alerts.length > 0 ? alerts.map((alert, index) => (
+                        {alerts && alerts.length > 0 ? alerts.map((alert, index) => (
                             <div key={index} className={`alert alert-${alert.type}`}>
                                 <div className="alert-message">{alert.message}</div>
                                 <div className="alert-time">{new Date(alert.timestamp).toLocaleString()}</div>
@@ -133,7 +151,7 @@ function Dashboard() {
     const renderTier2Dashboard = () => {
         if (!dashboardData) return null;
 
-        const { reservationTrends, heatmapData, addOnRevenue, leadTimeData } = dashboardData;
+        const { reservationTrends = [], heatmapData = [], addOnRevenue = {}, leadTimeData = [] } = dashboardData;
 
         return (
             <div className="dashboard-tier2">
@@ -141,7 +159,7 @@ function Dashboard() {
                     <div className="analytics-card">
                         <h3>Reservation Trends</h3>
                         <div className="trends-chart">
-                            {reservationTrends.map((trend, index) => (
+                            {reservationTrends && reservationTrends.length > 0 ? reservationTrends.map((trend, index) => (
                                 <div key={index} className="trend-item">
                                     <div className="trend-date">{formatDate(trend.date)}</div>
                                     <div className="trend-stats">
@@ -149,7 +167,9 @@ function Dashboard() {
                                         <span>Guests: {trend.guest_count}</span>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="no-data">No reservation trend data available</div>
+                            )}
                         </div>
                     </div>
 
@@ -157,12 +177,12 @@ function Dashboard() {
                         <h3>Add-on Revenue</h3>
                         <div className="revenue-stats">
                             <div className="revenue-item">
-                                <span>Cake Orders: {addOnRevenue.cake_orders}</span>
-                                <span>Revenue: €{addOnRevenue.cake_revenue || 0}</span>
+                                <span>Cake Orders: {addOnRevenue?.cake_orders || 0}</span>
+                                <span>Revenue: €{addOnRevenue?.cake_revenue || 0}</span>
                             </div>
                             <div className="revenue-item">
-                                <span>Flower Orders: {addOnRevenue.flower_orders}</span>
-                                <span>Revenue: €{addOnRevenue.flower_revenue || 0}</span>
+                                <span>Flower Orders: {addOnRevenue?.flower_orders || 0}</span>
+                                <span>Revenue: €{addOnRevenue?.flower_revenue || 0}</span>
                             </div>
                         </div>
                     </div>
@@ -170,12 +190,14 @@ function Dashboard() {
                     <div className="analytics-card">
                         <h3>Booking Lead Time</h3>
                         <div className="lead-time-chart">
-                            {leadTimeData.map((item, index) => (
+                            {leadTimeData && leadTimeData.length > 0 ? leadTimeData.map((item, index) => (
                                 <div key={index} className="lead-time-item">
                                     <div className="lead-time-category">{item.lead_time_category}</div>
                                     <div className="lead-time-count">{item.booking_count} bookings</div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="no-data">No lead time data available</div>
+                            )}
                         </div>
                     </div>
 
@@ -183,11 +205,13 @@ function Dashboard() {
                         <h3>Peak Performance Heatmap</h3>
                         <div className="heatmap-info">
                             <p>Most popular booking times:</p>
-                            {heatmapData.slice(0, 5).map((item, index) => (
+                            {heatmapData && heatmapData.length > 0 ? heatmapData.slice(0, 5).map((item, index) => (
                                 <div key={index} className="heatmap-item">
                                     Day {item.day_of_week}, {item.hour}:00 - {item.booking_count} bookings
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="no-data">No heatmap data available</div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -198,7 +222,7 @@ function Dashboard() {
     const renderTier3Dashboard = () => {
         if (!dashboardData) return null;
 
-        const { celebrationStats, hotelStats, semanticInsights, dietaryTrends } = dashboardData;
+        const { celebrationStats = [], hotelStats = [], semanticInsights = {}, dietaryTrends = {} } = dashboardData;
 
         return (
             <div className="dashboard-tier3">
@@ -206,12 +230,14 @@ function Dashboard() {
                     <div className="insights-card">
                         <h3>Celebration Types</h3>
                         <div className="celebration-stats">
-                            {celebrationStats.map((stat, index) => (
+                            {celebrationStats && celebrationStats.length > 0 ? celebrationStats.map((stat, index) => (
                                 <div key={index} className="celebration-item">
                                     <span className="celebration-type">{stat.celebration_type}</span>
                                     <span className="celebration-count">{stat.count}</span>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="no-data">No celebration data available</div>
+                            )}
                         </div>
                     </div>
 
@@ -232,14 +258,14 @@ function Dashboard() {
                     <div className="insights-card">
                         <h3>Semantic Query Analysis</h3>
                         <div className="semantic-info">
-                            <p>{semanticInsights.message}</p>
+                            <p>{semanticInsights?.message || 'No data available'}</p>
                         </div>
                     </div>
 
                     <div className="insights-card">
                         <h3>Dietary Trends</h3>
                         <div className="dietary-info">
-                            <p>{dietaryTrends.message}</p>
+                            <p>{dietaryTrends?.message || 'No data available'}</p>
                         </div>
                     </div>
                 </div>
@@ -250,7 +276,7 @@ function Dashboard() {
     const renderTier4Dashboard = () => {
         if (!dashboardData) return null;
 
-        const { botInteractionVolume, agentUsageBreakdown, missedOpportunities } = dashboardData;
+        const { botInteractionVolume = {}, agentUsageBreakdown = {}, missedOpportunities = {} } = dashboardData;
 
         return (
             <div className="dashboard-tier4">
@@ -258,22 +284,22 @@ function Dashboard() {
                     <div className="performance-card">
                         <h3>Bot Interaction Volume</h3>
                         <div className="interaction-stats">
-                            <div className="interaction-number">{botInteractionVolume.totalQueries}</div>
-                            <div className="interaction-message">{botInteractionVolume.message}</div>
+                            <div className="interaction-number">{botInteractionVolume?.totalQueries || 0}</div>
+                            <div className="interaction-message">{botInteractionVolume?.message || 'No data available'}</div>
                         </div>
                     </div>
 
                     <div className="performance-card">
                         <h3>Agent Usage Breakdown</h3>
                         <div className="agent-info">
-                            <p>{agentUsageBreakdown.message}</p>
+                            <p>{agentUsageBreakdown?.message || 'No data available'}</p>
                         </div>
                     </div>
 
                     <div className="performance-card">
                         <h3>Missed Opportunities</h3>
                         <div className="missed-info">
-                            <p>{missedOpportunities.message}</p>
+                            <p>{missedOpportunities?.message || 'No data available'}</p>
                         </div>
                     </div>
                 </div>
@@ -298,11 +324,23 @@ function Dashboard() {
     return (
         <div className="dashboard-container">
             <div className="dashboard-header">
-                <h1>Restaurant Dashboard</h1>
+                <div className="dashboard-title">
+                    <h1>{restaurantInfo ? restaurantInfo.name : 'Restaurant Dashboard'}</h1>
+                    {restaurantInfo && (
+                        <p className="restaurant-subtitle">{restaurantInfo.area}, {restaurantInfo.island}</p>
+                    )}
+                </div>
                 {userInfo && (
                     <div className="dashboard-user-info">
-                        <span>Restaurant ID: {restaurantId}</span>
                         {userInfo.role === 'admin' && <span className="admin-badge">Admin View</span>}
+                        {userInfo.role === 'admin' && (
+                            <button 
+                                onClick={() => navigate('/dashboard')} 
+                                className="back-to-selector-btn"
+                            >
+                                ← Back to Restaurant Selector
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

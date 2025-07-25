@@ -49,7 +49,10 @@ function Header() {
                 {user && userInfo ? (
                   <>
                     <li>
-                      <Link to={`/dashboard/${userInfo.restaurantId}`} className="nav-dashboard">
+                      <Link 
+                        to={userInfo.role === 'admin' ? '/dashboard' : `/dashboard/${userInfo.restaurantId}`} 
+                        className="nav-dashboard"
+                      >
                         Dashboard
                         {userInfo.role === 'admin' && <span className="admin-badge">Admin</span>}
                       </Link>

@@ -47,16 +47,16 @@ class RestaurantService {
         try {
             const query = `
                 SELECT 
-                    r.restaurant_id as id,
+                    r.restaurant_id,
                     r.name,
                     r.address,
-                    r.area as location,
+                    r.area,
                     r.island,
                     r.description,
                     r.cuisine,
                     r.phone,
                     r.email as contact_email,
-                    r.profile_image_url as image,
+                    r.profile_image_url,
                     o.first_name,
                     o.last_name,
                     o.phone as owner_phone,
@@ -79,16 +79,16 @@ class RestaurantService {
         try {
             const query = `
                 SELECT 
-                    r.restaurant_id as id,
+                    r.restaurant_id,
                     r.name,
                     r.address,
-                    r.area as location,
+                    r.area,
                     r.island,
                     r.description,
                     r.cuisine,
                     r.phone,
                     r.email as contact_email,
-                    r.profile_image_url as image,
+                    r.profile_image_url,
                     o.first_name,
                     o.last_name,
                     o.phone as owner_phone,

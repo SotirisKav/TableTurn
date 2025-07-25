@@ -24,8 +24,8 @@ router.get('/tier1/:restaurantId', checkDashboardAccess, async (req, res) => {
 
         // Get restaurant capacity for occupancy calculation
         const [capacityResult] = await db.execute(`
-            SELECT COALESCE(SUM(capacity), 0) as total_capacity 
-            FROM restaurant_table_types 
+            SELECT COUNT(*) as total_capacity 
+            FROM tables 
             WHERE restaurant_id = $1
         `, [restaurantId]);
 
@@ -39,8 +39,8 @@ router.get('/tier1/:restaurantId', checkDashboardAccess, async (req, res) => {
                 COUNT(*) as reservation_count
             FROM reservation 
             WHERE restaurant_id = $1 
-                AND reservation_date >= CURDATE() 
-                AND reservation_date < DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+                AND reservation_date >= CURRENT_DATE 
+                AND reservation_date < CURRENT_DATE + INTERVAL '7 days'
             GROUP BY DATE(reservation_date)
             ORDER BY reservation_date
         `, [restaurantId]);
@@ -58,7 +58,7 @@ router.get('/tier1/:restaurantId', checkDashboardAccess, async (req, res) => {
             FROM reservation 
             WHERE restaurant_id = $1
                 AND (guests >= 6 OR celebration_type != 'none' OR cake = true OR flowers = true)
-                AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                AND created_at >= NOW() - INTERVAL '24 hours'
             ORDER BY created_at DESC
             LIMIT 10
         `, [restaurantId]);
@@ -99,22 +99,22 @@ router.get('/tier2/:restaurantId', checkDashboardAccess, async (req, res) => {
                 SUM(guests) as guest_count
             FROM reservation 
             WHERE restaurant_id = $1 
-                AND reservation_date >= DATE_SUB(CURDATE(), INTERVAL $2 DAY)
+                AND reservation_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY DATE(reservation_date)
             ORDER BY reservation_date
-        `, [restaurantId, parseInt(period)]);
+        `, [restaurantId]);
 
         // Peak performance heatmap (day of week vs hour)
         const [heatmapData] = await db.execute(`
             SELECT 
-                DAYOFWEEK(reservation_date) as day_of_week,
-                HOUR(reservation_time) as hour,
+                EXTRACT(DOW FROM reservation_date) as day_of_week,
+                EXTRACT(HOUR FROM reservation_time) as hour,
                 COUNT(*) as booking_count
             FROM reservation 
             WHERE restaurant_id = $1
-                AND reservation_date >= DATE_SUB(CURDATE(), INTERVAL $2 DAY)
-            GROUP BY DAYOFWEEK(reservation_date), HOUR(reservation_time)
-        `, [restaurantId, parseInt(period)]);
+                AND reservation_date >= CURRENT_DATE - INTERVAL '30 days'
+            GROUP BY EXTRACT(DOW FROM reservation_date), EXTRACT(HOUR FROM reservation_time)
+        `, [restaurantId]);
 
         // Revenue from add-ons
         const [addOnRevenue] = await db.execute(`
@@ -125,24 +125,24 @@ router.get('/tier2/:restaurantId', checkDashboardAccess, async (req, res) => {
                 SUM(CASE WHEN flowers = true THEN flowers_price ELSE 0 END) as flower_revenue
             FROM reservation 
             WHERE restaurant_id = $1
-                AND reservation_date >= DATE_SUB(CURDATE(), INTERVAL $2 DAY)
-        `, [restaurantId, parseInt(period)]);
+                AND reservation_date >= CURRENT_DATE - INTERVAL '30 days'
+        `, [restaurantId]);
 
         // Booking lead time analysis
         const [leadTimeData] = await db.execute(`
             SELECT 
                 CASE 
-                    WHEN DATEDIFF(reservation_date, created_at) <= 1 THEN '0-1 days'
-                    WHEN DATEDIFF(reservation_date, created_at) <= 7 THEN '2-7 days'
-                    WHEN DATEDIFF(reservation_date, created_at) <= 14 THEN '8-14 days'
+                    WHEN (reservation_date - DATE(created_at)) <= 1 THEN '0-1 days'
+                    WHEN (reservation_date - DATE(created_at)) <= 7 THEN '2-7 days'
+                    WHEN (reservation_date - DATE(created_at)) <= 14 THEN '8-14 days'
                     ELSE '15+ days'
                 END as lead_time_category,
                 COUNT(*) as booking_count
             FROM reservation 
             WHERE restaurant_id = $1
-                AND created_at >= DATE_SUB(NOW(), INTERVAL $2 DAY)
+                AND created_at >= NOW() - INTERVAL '30 days'
             GROUP BY lead_time_category
-        `, [restaurantId, parseInt(period)]);
+        `, [restaurantId]);
 
         res.json({
             reservationTrends,
@@ -171,10 +171,10 @@ router.get('/tier3/:restaurantId', checkDashboardAccess, async (req, res) => {
             FROM reservation 
             WHERE restaurant_id = $1 
                 AND celebration_type != 'none'
-                AND reservation_date >= DATE_SUB(CURDATE(), INTERVAL $2 DAY)
+                AND reservation_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY celebration_type
             ORDER BY count DESC
-        `, [restaurantId, parseInt(period)]);
+        `, [restaurantId]);
 
         // Hotel transfer requests (if available)
         const [hotelStats] = await db.execute(`
@@ -184,11 +184,11 @@ router.get('/tier3/:restaurantId', checkDashboardAccess, async (req, res) => {
             FROM reservation 
             WHERE restaurant_id = $1 
                 AND hotel_name IS NOT NULL
-                AND reservation_date >= DATE_SUB(CURDATE(), INTERVAL $2 DAY)
+                AND reservation_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY hotel_name
             ORDER BY request_count DESC
             LIMIT 10
-        `, [restaurantId, parseInt(period)]);
+        `, [restaurantId]);
 
         res.json({
             celebrationStats,

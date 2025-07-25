@@ -3038,11 +3038,7 @@ body {
   margin-left: calc(50% - 50vw);
 }
 
-.dashboard-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
+/* Removed max-width restriction for dashboard full-width */
 
 .dashboard-header {
   display: flex;
@@ -5683,9 +5679,13 @@ input[type="file"]:focus {
 
 /* Dashboard Styles */
 .dashboard-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  min-height: 100vh;
+  width: 100vw;
   padding: 6rem 2rem 2rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  box-sizing: border-box;
+  margin-left: calc(50% - 50vw);
+  position: relative;
 }
 
 .dashboard-header {
@@ -5693,8 +5693,11 @@ input[type="file"]:focus {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid var(--soft-blue);
+  padding: 1.5rem 2rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(30, 58, 138, 0.08);
+  border-left: 4px solid var(--aegean-blue);
 }
 
 .dashboard-header h1 {
@@ -5722,18 +5725,22 @@ input[type="file"]:focus {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 2rem;
-  border-bottom: 1px solid var(--soft-blue);
+  background: white;
+  border-radius: 12px;
+  padding: 0.5rem;
+  box-shadow: 0 2px 8px rgba(30, 58, 138, 0.05);
 }
 
 .dashboard-tabs button {
   padding: 0.75rem 1.5rem;
-  background: none;
+  background: transparent;
   border: none;
+  border-radius: 8px;
   color: var(--text-gray);
   font-weight: 500;
   cursor: pointer;
-  border-bottom: 3px solid transparent;
   transition: var(--transition);
+  white-space: nowrap;
 }
 
 .dashboard-tabs button:hover {
@@ -5742,9 +5749,10 @@ input[type="file"]:focus {
 }
 
 .dashboard-tabs button.active {
-  color: var(--aegean-blue);
-  border-bottom-color: var(--aegean-blue);
+  color: white;
+  background: var(--aegean-blue);
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(30, 58, 138, 0.2);
 }
 
 /* Tier 1 Dashboard */
@@ -5757,11 +5765,13 @@ input[type="file"]:focus {
 
 .snapshot-card {
   background: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px var(--shadow);
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(30, 58, 138, 0.1);
   text-align: center;
-  border: 1px solid var(--soft-blue);
+  border-top: 4px solid var(--aegean-blue);
+  border: none;
+  transition: var(--transition);
 }
 
 .snapshot-card h3 {
@@ -5772,9 +5782,11 @@ input[type="file"]:focus {
 }
 
 .snapshot-number {
-  font-size: 2.5rem;
-  font-weight: 700;
+  font-size: 3.5rem;
+  font-weight: 800;
   color: var(--aegean-blue);
+  margin: 1rem 0;
+  text-shadow: 0 2px 4px rgba(30, 58, 138, 0.1);
 }
 
 .weekly-demand {
@@ -6008,3 +6020,228 @@ input[type="file"]:focus {
   }
 }
 
+
+
+/* Admin Dashboard Selector */
+.admin-selector-container {
+  min-height: 100vh;
+  width: 100vw;
+  padding: 6rem 2rem 2rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  box-sizing: border-box;
+  margin-left: calc(50% - 50vw);
+  position: relative;
+}
+
+.admin-selector-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.admin-selector-header h1 {
+  color: var(--aegean-blue);
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.admin-selector-header p {
+  color: var(--text-gray);
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.admin-info {
+  display: flex;
+  justify-content: center;
+}
+
+.restaurant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.restaurant-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(30, 58, 138, 0.1);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.restaurant-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(30, 58, 138, 0.2);
+  border-color: var(--aegean-blue);
+}
+
+.restaurant-image {
+  height: 200px;
+  position: relative;
+  overflow: hidden;
+}
+
+.restaurant-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.restaurant-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--soft-blue), #e0f2fe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4rem;
+}
+
+.restaurant-info {
+  padding: 1.5rem;
+}
+
+.restaurant-info h3 {
+  color: var(--aegean-blue);
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.restaurant-location {
+  color: var(--text-gray);
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.restaurant-cuisine {
+  color: var(--aegean-blue);
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.view-dashboard-btn {
+  background: var(--aegean-blue);
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  font-weight: 600;
+  transition: background 0.3s ease;
+}
+
+.restaurant-card:hover .view-dashboard-btn {
+  background: var(--deep-blue);
+}
+
+
+
+.dashboard-title h1 {
+  margin-bottom: 0.5rem;
+}
+
+.restaurant-subtitle {
+  color: var(--text-gray);
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 400;
+}
+
+.back-to-selector-btn {
+  background: var(--aegean-blue);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.3s ease;
+  margin-left: 1rem;
+}
+
+.back-to-selector-btn:hover {
+  background: var(--deep-blue);
+}
+
+.dashboard-user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+
+
+/* Dashboard Content Improvements */
+.dashboard-content {
+  min-height: 60vh;
+  width: 100%;
+}
+
+.dashboard-tier1,
+.dashboard-tier2,
+.dashboard-tier3,
+.dashboard-tier4 {
+  width: 100%;
+}
+
+/* Enhanced hover effects */
+.snapshot-card:hover,
+.analytics-card:hover,
+.insights-card:hover,
+.performance-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(30, 58, 138, 0.15);
+}
+
+/* Better card styling for all dashboard cards */
+.analytics-card,
+.insights-card,
+.performance-card {
+  border-top: 4px solid var(--aegean-blue);
+  min-height: 200px;
+}
+
+/* No data states with better styling */
+.no-data {
+  color: var(--text-gray);
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+  background: rgba(30, 58, 138, 0.02);
+  border-radius: 8px;
+  border: 1px dashed rgba(30, 58, 138, 0.2);
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 5rem 1rem 2rem;
+  }
+  
+  .dashboard-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+    padding: 1rem;
+  }
+  
+  .dashboard-tabs {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .snapshot-cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .analytics-grid,
+  .insights-grid,
+  .ai-performance-grid {
+    grid-template-columns: 1fr;
+  }
+}

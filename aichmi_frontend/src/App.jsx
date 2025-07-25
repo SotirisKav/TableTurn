@@ -12,6 +12,7 @@ import Confirmation from './components/Confirmation';
 import Subscriptions from './components/Subscriptions';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import AdminDashboardSelector from './components/AdminDashboardSelector';
 import SimpleRestaurantForm from './components/SimpleRestaurantForm';
 import './App.css';
 
@@ -35,6 +36,7 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/subscriptions" element={<Subscriptions />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/dashboard" element={<AdminDashboardSelector />} />
         <Route path="/dashboard/:restaurantId" element={<Dashboard />} />
         <Route path="/restaurant-setup" element={<SimpleRestaurantForm />} />
       </Routes>
