@@ -7353,7 +7353,10 @@ button:hover {
 
 .browse-restaurants-modern {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  width: 100vw;
+  background: #f8fafc;
+  padding: 0;
+  margin: 0;
 }
 
 /* Loading State */
@@ -7505,10 +7508,148 @@ button:hover {
 
 /* Main Content */
 .main-content {
-  padding: 4rem 0;
-  margin-top: -2rem;
+  padding: 6rem 0 2rem 0;
   position: relative;
   z-index: 1;
+  width: 100%;
+}
+
+/* Search Section */
+.search-section {
+  margin-bottom: 3rem;
+  padding: 0 2rem;
+}
+
+.search-section .search-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-section .search-box {
+  position: relative;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  width: 100%;
+  min-height: 56px;
+}
+
+.search-section .search-box:focus-within {
+  border-color: var(--aegean-blue);
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1), 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.search-section .search-icon {
+  width: 20px;
+  height: 20px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.search-section .search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--text-dark);
+  outline: none;
+}
+
+.search-section .search-input::placeholder {
+  color: #9ca3af;
+}
+
+.search-section .clear-search {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.search-section .clear-search:hover {
+  background: #f3f4f6;
+  color: var(--text-dark);
+}
+
+/* Inline Search Box (within filter bar) */
+.search-box-inline {
+  position: relative;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0.875rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s ease;
+  min-width: 280px;
+}
+
+.search-box-inline:focus-within {
+  border-color: var(--aegean-blue);
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1), 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.search-box-inline:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+}
+
+.search-box-inline .search-icon {
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.search-input-inline {
+  flex: 1;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--text-dark);
+  outline: none;
+}
+
+.search-input-inline::placeholder {
+  color: #9ca3af;
+}
+
+.search-box-inline .clear-search {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.search-box-inline .clear-search:hover {
+  background: #f3f4f6;
+  color: var(--text-dark);
 }
 
 .container {
@@ -7552,7 +7693,7 @@ button:hover {
 }
 
 .filter-select {
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1.25rem;
   border: 2px solid #e5e7eb;
   border-radius: 12px;
   background: white;
@@ -7560,13 +7701,19 @@ button:hover {
   color: var(--text-dark);
   cursor: pointer;
   transition: all 0.3s ease;
-  min-width: 140px;
+  min-width: 160px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 }
 
 .filter-select:focus {
   outline: none;
   border-color: var(--aegean-blue);
-  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1), 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.filter-select:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
 }
 
 .filter-right {
@@ -7684,6 +7831,41 @@ button:hover {
 
 .restaurant-card-modern:hover .image-overlay {
   opacity: 1;
+}
+
+/* Reserve Overlay Styles */
+.reserve-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.reserve-table-btn {
+  background: linear-gradient(135deg, var(--aegean-blue), var(--deep-blue));
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(30, 58, 138, 0.3);
+  transform: translateY(10px);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.restaurant-card-modern:hover .reserve-table-btn {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.reserve-table-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(30, 58, 138, 0.4);
 }
 
 .quick-actions {

@@ -16,18 +16,14 @@ function BrowseRestaurants() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [cuisineFilter, setCuisineFilter] = useState('All');
-    const [priceFilter, setPriceFilter] = useState('All');
+    const [islandFilter, setIslandFilter] = useState('All');
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
-    const [sortBy, setSortBy] = useState('name');
     const navigate = useNavigate();
 
     const handleBook = (restaurantId) => {
         navigate(`/reservation/${restaurantId}`);
     };
 
-    const handleChat = (restaurantId) => {
-        navigate(`/chat/${restaurantId}`);
-    };
 
     useEffect(() => {
         const fetchRestaurants = async () => {
@@ -50,27 +46,17 @@ function BrowseRestaurants() {
         let filteredList = restaurants.filter(r =>
             r.name.toLowerCase().includes(search.toLowerCase()) &&
             (cuisineFilter === 'All' || r.cuisine === cuisineFilter) &&
-            (priceFilter === 'All' || r.priceRange === priceFilter)
+            (islandFilter === 'All' || r.island === islandFilter)
         );
 
-        // Sort restaurants
-        filteredList.sort((a, b) => {
-            switch (sortBy) {
-                case 'rating':
-                    return (b.rating || 0) - (a.rating || 0);
-                case 'price':
-                    return (a.priceRange || '').localeCompare(b.priceRange || '');
-                case 'name':
-                default:
-                    return a.name.localeCompare(b.name);
-            }
-        });
+        // Sort restaurants by name (default)
+        filteredList.sort((a, b) => a.name.localeCompare(b.name));
 
         setFiltered(filteredList);
-    }, [search, cuisineFilter, priceFilter, sortBy, restaurants]);
+    }, [search, cuisineFilter, islandFilter, restaurants]);
 
     const cuisines = ['All', ...Array.from(new Set(restaurants.map(r => r.cuisine)))];
-    const prices = ['All', ...Array.from(new Set(restaurants.map(r => r.priceRange)))];
+    const islands = ['All', ...Array.from(new Set(restaurants.map(r => r.island)))];
 
     if (loading) {
         return (
@@ -86,52 +72,52 @@ function BrowseRestaurants() {
 
     return (
         <div className="browse-restaurants-modern">
-            {/* Hero Section */}
-            <div className="hero-section">
-                <div className="hero-content">
-                    <div className="hero-text">
-                        <h1 className="hero-title">
-                            Discover <span className="gradient-text">Extraordinary</span> Dining
-                        </h1>
-                        <p className="hero-subtitle">
-                            Curated collection of Kos's finest restaurants, where tradition meets innovation
-                        </p>
-                    </div>
-                    
-                    {/* Enhanced Search Bar */}
-                    <div className="search-container">
-                        <div className="search-box">
-                            <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                            </svg>
-                            <input
-                                type="text"
-                                placeholder="Search restaurants, cuisine, or location..."
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                                className="search-input"
-                            />
-                            {search && (
-                                <button
-                                    className="clear-search"
-                                    onClick={() => setSearch('')}
-                                    aria-label="Clear search"
-                                >
-                                    ×
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                <div className="hero-background"></div>
-            </div>
 
             <div className="main-content">
                 <div className="container">
-                    {/* Filter Bar */}
+                    {/* Combined Filter Bar with Search */}
                     <div className="filter-section">
                         <div className="filter-left">
+                            {/* Search */}
+                            <div className="filter-group">
+                                <label className="filter-label">Search</label>
+                                <div className="search-box-inline">
+                                    <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <path d="M21 21l-4.35-4.35"/>
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Search restaurants..."
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        className="search-input-inline"
+                                    />
+                                    {search && (
+                                        <button
+                                            className="clear-search"
+                                            onClick={() => setSearch('')}
+                                            aria-label="Clear search"
+                                        >
+                                            ×
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* Island */}
+                            <div className="filter-group">
+                                <label className="filter-label">Island</label>
+                                <select
+                                    value={islandFilter}
+                                    onChange={e => setIslandFilter(e.target.value)}
+                                    className="filter-select"
+                                >
+                                    {islands.map(i => <option key={i} value={i}>{i}</option>)}
+                                </select>
+                            </div>
+                            
+                            {/* Cuisine */}
                             <div className="filter-group">
                                 <label className="filter-label">Cuisine</label>
                                 <select
@@ -140,30 +126,6 @@ function BrowseRestaurants() {
                                     className="filter-select"
                                 >
                                     {cuisines.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </div>
-                            
-                            <div className="filter-group">
-                                <label className="filter-label">Price Range</label>
-                                <select
-                                    value={priceFilter}
-                                    onChange={e => setPriceFilter(e.target.value)}
-                                    className="filter-select"
-                                >
-                                    {prices.map(p => <option key={p} value={p}>{p}</option>)}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label className="filter-label">Sort by</label>
-                                <select
-                                    value={sortBy}
-                                    onChange={e => setSortBy(e.target.value)}
-                                    className="filter-select"
-                                >
-                                    <option value="name">Name</option>
-                                    <option value="rating">Rating</option>
-                                    <option value="price">Price</option>
                                 </select>
                             </div>
                         </div>
@@ -197,10 +159,6 @@ function BrowseRestaurants() {
                                     </svg>
                                 </button>
                             </div>
-                            
-                            <span className="results-count">
-                                {filtered.length} {filtered.length === 1 ? 'restaurant' : 'restaurants'}
-                            </span>
                         </div>
                     </div>
 
@@ -216,7 +174,7 @@ function BrowseRestaurants() {
                                     onClick={() => {
                                         setSearch('');
                                         setCuisineFilter('All');
-                                        setPriceFilter('All');
+                                        setIslandFilter('All');
                                     }}
                                 >
                                     Reset Filters
@@ -236,20 +194,12 @@ function BrowseRestaurants() {
                                             onError={e => { e.target.src = FALLBACK_IMAGE; }}
                                         />
                                         <div className="image-overlay">
-                                            <div className="quick-actions">
+                                            <div className="reserve-overlay">
                                                 <button
-                                                    className="quick-action-btn chat"
-                                                    onClick={() => handleChat(restaurant.restaurant_id)}
-                                                    title="Chat with AI"
-                                                >
-                                                    💬
-                                                </button>
-                                                <button
-                                                    className="quick-action-btn book"
+                                                    className="reserve-table-btn"
                                                     onClick={() => handleBook(restaurant.restaurant_id)}
-                                                    title="Book now"
                                                 >
-                                                    📅
+                                                    Reserve a Table
                                                 </button>
                                             </div>
                                         </div>
@@ -285,20 +235,6 @@ function BrowseRestaurants() {
                                             {restaurant.description}
                                         </p>
 
-                                        <div className="card-actions">
-                                            <button
-                                                className="btn-primary"
-                                                onClick={() => handleBook(restaurant.restaurant_id)}
-                                            >
-                                                Reserve Table
-                                            </button>
-                                            <button
-                                                className="btn-secondary"
-                                                onClick={() => handleChat(restaurant.restaurant_id)}
-                                            >
-                                                Chat with AI
-                                            </button>
-                                        </div>
                                     </div>
                                 </div>
                             ))
