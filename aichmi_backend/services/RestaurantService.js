@@ -77,6 +77,10 @@ class RestaurantService {
     // Get a specific restaurant by ID
     static async getRestaurantById(id) {
         try {
+            // Check if id is valid
+            if (!id || id === 'null' || id === 'undefined') {
+                throw new Error(`Invalid restaurant ID: ${id}`);
+            }
             const query = `
                 SELECT 
                     r.restaurant_id,

@@ -308,13 +308,16 @@ function ChatWithAichmi() {
     const chatHistoryRef = useRef(null);
 
     useEffect(() => {
-        if (restaurantId) {
+        if (restaurantId && restaurantId !== 'undefined' && restaurantId !== 'null') {
             fetch(`/api/restaurants/${restaurantId}`)
                 .then(res => res.json())
                 .then(data => setRestaurantName(data.name || restaurantId))
                 .catch(() => setRestaurantName(restaurantId));
+        } else {
+            // If no restaurant selected, redirect to browse restaurants
+            navigate('/browse-restaurants');
         }
-    }, [restaurantId]);
+    }, [restaurantId, navigate]);
 
     useEffect(() => {
         if (chatHistoryRef.current) {
@@ -428,7 +431,7 @@ function ChatWithAichmi() {
                     </div>
                 </div>
 
-                {restaurantId && (
+                {restaurantId && restaurantId !== 'undefined' && restaurantId !== 'null' && (
                     <div className="premium-chat-context">
                         <div className="context-text">
                             Booking for <span className="restaurant-name">{restaurantName || 'Loading...'}</span>
@@ -482,6 +485,7 @@ function ChatWithAichmi() {
                     )}
                 </div>
 
+                
                 {/* Premium input area */}
                 <form className="premium-input-container" onSubmit={handleSend} autoComplete="off">
                     <div className="input-wrapper">

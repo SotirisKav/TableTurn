@@ -19,6 +19,15 @@ class RestaurantInfoAgent extends BaseAgent {
         try {
             console.log(`🏪 ${this.name} processing:`, message);
 
+            // Check if we have a valid restaurant ID
+            if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
+                return {
+                    response: "I need to know which restaurant you're asking about. Please select a restaurant first or visit a specific restaurant page.",
+                    requiresInput: false,
+                    isComplete: true
+                };
+            }
+
             // Use RAG to retrieve relevant data
             const ragData = await this.retrieveRAGData(message, restaurantId);
             
@@ -73,6 +82,11 @@ class RestaurantInfoAgent extends BaseAgent {
 
     async fetchRestaurantData(restaurantId) {
         try {
+            // Check if restaurantId is valid
+            if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
+                throw new Error(`Restaurant not found: ${restaurantId}`);
+            }
+            
             // Fetch basic restaurant info
             const restaurant = await RestaurantService.getRestaurantById(restaurantId);
             

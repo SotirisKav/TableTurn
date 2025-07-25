@@ -132,18 +132,17 @@ function BrowseRestaurants() {
                                         </span>
                                     </div>
                                     <div className="restaurant-meta-row">
-                                        <span className="rating" aria-label={`Rating: ${restaurant.rating} out of 5`}>
-                                            {Array.from({ length: 5 }).map((_, i) => (
-                                                <span key={i} className={i < Math.round(Number(restaurant.rating)) ? 'star filled' : 'star'}>★</span>
-                                            ))}
-                                            <span className="rating-value">{restaurant.rating}</span>
+                                        <span className="location-info">
+                                            <span className="area">{restaurant.area}</span>
+                                            <span className="separator">•</span>
+                                            <span className="island">{restaurant.island}</span>
                                         </span>
                                         <span className="price-euros" aria-label={`Price range: ${restaurant.pricerange || restaurant.price_range || ''}`}>{restaurant.pricerange || restaurant.price_range || ''}</span>
                                     </div>
                                     <p className="restaurant-description vertical">{restaurant.description}</p>
                                     <button
                                         className="cta-button primary restaurant-book-btn vertical"
-                                        onClick={() => handleBook(restaurant.id)}
+                                        onClick={() => handleBook(restaurant.restaurant_id)}
                                     >
                                         View Details & Book
                                     </button>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 function Dashboard() {
@@ -57,13 +57,7 @@ function Dashboard() {
         fetchUserInfo();
     }, [restaurantId]);
 
-    useEffect(() => {
-        if (userInfo && !error) {
-            fetchDashboardData(activeTab);
-        }
-    }, [activeTab, userInfo, restaurantId]);
-
-    const fetchDashboardData = async (tier) => {
+    const fetchDashboardData = useCallback(async (tier) => {
         try {
             setLoading(true);
             const response = await fetch(`/api/dashboard/${tier}/${restaurantId}`, {
@@ -86,7 +80,13 @@ function Dashboard() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [restaurantId]);
+
+    useEffect(() => {
+        if (userInfo && !error) {
+            fetchDashboardData(activeTab);
+        }
+    }, [activeTab, userInfo, error, fetchDashboardData]);
 
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleDateString();
@@ -96,52 +96,227 @@ function Dashboard() {
     const renderTier1Dashboard = () => {
         if (!dashboardData) return null;
 
-        const { todaySnapshot = {}, weeklyDemand = [], alerts = [] } = dashboardData;
+        const { 
+            upcomingReservations = {}, 
+            liveStatus = {}, 
+            alerts = [],
+            weeklyDemand = [] // Legacy compatibility
+        } = dashboardData;
+
+        const formatTime = (timeString) => {
+            if (!timeString) return '';
+            const time = new Date(`1970-01-01T${timeString}`);
+            return time.toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        };
 
         return (
             <div className="dashboard-tier1">
-                <div className="snapshot-cards">
-                    <div className="snapshot-card">
-                        <h3>Reservations Today</h3>
-                        <div className="snapshot-number">{todaySnapshot?.reservationsToday || 0}</div>
-                    </div>
-                    <div className="snapshot-card">
-                        <h3>Total Guests Today</h3>
-                        <div className="snapshot-number">{todaySnapshot?.totalGuestsToday || 0}</div>
-                    </div>
-                    <div className="snapshot-card">
-                        <h3>Projected Occupancy</h3>
-                        <div className="snapshot-number">{todaySnapshot?.projectedOccupancy || 0}%</div>
+                {/* Header Status Bar */}
+                <div className="live-status-header">
+                    <div className="status-indicators">
+                        <div className="status-item">
+                            <span className="status-label">Current Covers</span>
+                            <span className="status-value">{liveStatus?.todayMetrics?.covers || 0}</span>
+                        </div>
+                        <div className="status-item">
+                            <span className="status-label">Available Tables</span>
+                            <span className="status-value available">{liveStatus?.tableStatus?.available || 0}</span>
+                        </div>
+                        <div className="status-item">
+                            <span className="status-label">Today's Revenue</span>
+                            <span className="status-value">€{liveStatus?.todayMetrics?.estimatedRevenue || 0}</span>
+                        </div>
+                        <div className="status-item">
+                            <span className="status-label">Occupancy</span>
+                            <span className="status-value">{liveStatus?.todayMetrics?.projectedOccupancy || 0}%</span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="weekly-demand">
-                    <h3>Next 7 Days Demand</h3>
-                    <div className="demand-chart">
-                        {weeklyDemand && weeklyDemand.length > 0 ? weeklyDemand.map((day, index) => (
-                            <div key={index} className="demand-bar">
-                                <div className="bar" style={{height: `${Math.max(day.reservation_count * 10, 20)}px`}}>
-                                    <span className="bar-value">{day.reservation_count}</span>
+                <div className="dashboard-main-layout">
+                    {/* Left Column: Reservation Management */}
+                    <div className="reservation-management">
+                        <div className="section-header">
+                            <h3>📅 Upcoming Reservations</h3>
+                            <div className="today-summary">
+                                <span>{upcomingReservations?.today?.totalReservations || 0} reservations</span>
+                                <span>•</span>
+                                <span>{upcomingReservations?.today?.totalCovers || 0} covers</span>
+                            </div>
+                        </div>
+
+                        {/* Today's Timeline */}
+                        <div className="reservation-timeline">
+                            <h4>Today ({upcomingReservations?.today?.date})</h4>
+                            <div className="timeline-slots">
+                                {upcomingReservations?.today?.timeSlots && Object.keys(upcomingReservations.today.timeSlots).length > 0 ? 
+                                    Object.entries(upcomingReservations.today.timeSlots).map(([timeSlot, data]) => (
+                                        <div key={timeSlot} className="time-slot">
+                                            <div className="time-slot-header">
+                                                <span className="time">{timeSlot}</span>
+                                                <div className="slot-summary">
+                                                    <span>{data.tables} tables</span>
+                                                    <span>•</span>
+                                                    <span>{data.guests} guests</span>
+                                                </div>
+                                            </div>
+                                            <div className="reservations-list">
+                                                {data.reservations.map((reservation, idx) => (
+                                                    <div key={idx} className="reservation-item">
+                                                        <div className="reservation-details">
+                                                            <span className="guest-name">{reservation.name}</span>
+                                                            <span className="party-size">Party of {reservation.guests}</span>
+                                                            {reservation.table && <span className="table">Table {reservation.table}</span>}
+                                                        </div>
+                                                        {reservation.celebration !== 'none' && (
+                                                            <div className="celebration-badge">{reservation.celebration}</div>
+                                                        )}
+                                                        {reservation.requests && (
+                                                            <div className="special-requests">{reservation.requests}</div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="no-reservations">No reservations scheduled for today</div>
+                                    )
+                                }
+                            </div>
+                        </div>
+
+                        {/* 7-Day Outlook */}
+                        <div className="weekly-outlook">
+                            <h4>Next 7 Days</h4>
+                            <div className="week-bars">
+                                {upcomingReservations?.nextSevenDays?.map((day, index) => (
+                                    <div key={index} className="day-bar">
+                                        <div className="bar" style={{height: `${Math.max(day.reservation_count * 8, 15)}px`}}>
+                                            <span className="bar-value">{day.reservation_count}</span>
+                                        </div>
+                                        <div className="day-info">
+                                            <div className="day-date">{formatDate(day.date)}</div>
+                                            <div className="day-covers">{day.total_covers} covers</div>
+                                        </div>
+                                    </div>
+                                )) || weeklyDemand.map((day, index) => ( // Legacy fallback
+                                    <div key={index} className="day-bar">
+                                        <div className="bar" style={{height: `${Math.max(day.reservation_count * 8, 15)}px`}}>
+                                            <span className="bar-value">{day.reservation_count}</span>
+                                        </div>
+                                        <div className="day-info">
+                                            <div className="day-date">{formatDate(day.date)}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Center Column: Live Operations */}
+                    <div className="live-operations">
+                        <div className="section-header">
+                            <h3>🏪 Current Status</h3>
+                            <div className="last-updated">
+                                Updated: {liveStatus?.currentTime ? new Date(liveStatus.currentTime).toLocaleTimeString() : 'N/A'}
+                            </div>
+                        </div>
+
+                        {/* Table Status */}
+                        <div className="table-status-grid">
+                            <div className="status-card available">
+                                <div className="status-number">{liveStatus?.tableStatus?.available || 0}</div>
+                                <div className="status-label">Available</div>
+                            </div>
+                            <div className="status-card occupied">
+                                <div className="status-number">{liveStatus?.tableStatus?.occupied || 0}</div>
+                                <div className="status-label">Occupied</div>
+                            </div>
+                            <div className="status-card reserved">
+                                <div className="status-number">{liveStatus?.tableStatus?.reserved || 0}</div>
+                                <div className="status-label">Reserved</div>
+                            </div>
+                            <div className="status-card cleaning">
+                                <div className="status-number">{liveStatus?.tableStatus?.cleaning || 0}</div>
+                                <div className="status-label">Cleaning</div>
+                            </div>
+                        </div>
+
+                        {/* Today's Performance */}
+                        <div className="performance-metrics">
+                            <h4>💰 Today's Performance</h4>
+                            <div className="metrics-grid">
+                                <div className="metric">
+                                    <span className="metric-label">Sales</span>
+                                    <span className="metric-value">€{liveStatus?.todayMetrics?.estimatedRevenue || 0}</span>
                                 </div>
-                                <div className="bar-label">{formatDate(day.date)}</div>
+                                <div className="metric">
+                                    <span className="metric-label">Avg Party</span>
+                                    <span className="metric-value">{liveStatus?.todayMetrics?.avgPartySize || 0}</span>
+                                </div>
+                                <div className="metric">
+                                    <span className="metric-label">Add-ons</span>
+                                    <span className="metric-value">€{liveStatus?.todayMetrics?.addonRevenue || 0}</span>
+                                </div>
+                                <div className="metric">
+                                    <span className="metric-label">Recent Bookings</span>
+                                    <span className="metric-value">{liveStatus?.operationalInsights?.recentBookings || 0}</span>
+                                </div>
                             </div>
-                        )) : (
-                            <div className="no-data">No demand data available</div>
-                        )}
+                        </div>
                     </div>
-                </div>
 
-                <div className="alerts-section">
-                    <h3>Recent Alerts & Notifications</h3>
-                    <div className="alerts-list">
-                        {alerts && alerts.length > 0 ? alerts.map((alert, index) => (
-                            <div key={index} className={`alert alert-${alert.type}`}>
-                                <div className="alert-message">{alert.message}</div>
-                                <div className="alert-time">{new Date(alert.timestamp).toLocaleString()}</div>
+                    {/* Right Column: Alerts & KPIs */}
+                    <div className="alerts-kpis">
+                        <div className="section-header">
+                            <h3>📊 Key Metrics</h3>
+                        </div>
+
+                        {/* Quick KPIs */}
+                        <div className="kpi-cards">
+                            <div className="kpi-card revenue">
+                                <div className="kpi-label">Revenue</div>
+                                <div className="kpi-value">€{liveStatus?.todayMetrics?.estimatedRevenue || 0}</div>
+                                <div className="kpi-change">+12% vs yesterday</div>
                             </div>
-                        )) : (
-                            <div className="no-alerts">No recent alerts</div>
-                        )}
+                            <div className="kpi-card covers">
+                                <div className="kpi-label">Covers</div>
+                                <div className="kpi-value">{liveStatus?.todayMetrics?.covers || 0}</div>
+                                <div className="kpi-change">+8% vs yesterday</div>
+                            </div>
+                            <div className="kpi-card occupancy">
+                                <div className="kpi-label">Occupancy</div>
+                                <div className="kpi-value">{liveStatus?.todayMetrics?.projectedOccupancy || 0}%</div>
+                                <div className="kpi-target">Target: 75%</div>
+                            </div>
+                        </div>
+
+                        {/* Alerts Section */}
+                        <div className="alerts-section">
+                            <h4>⚠️ Alerts & Notifications</h4>
+                            <div className="alerts-list">
+                                {alerts && alerts.length > 0 ? alerts.map((alert, index) => (
+                                    <div key={index} className={`alert alert-${alert.priority || alert.type}`}>
+                                        <div className="alert-header">
+                                            <span className="alert-title">{alert.title || 'Alert'}</span>
+                                            <span className="alert-time">
+                                                {alert.date && alert.time ? 
+                                                    `${formatDate(alert.date)} ${formatTime(alert.time)}` : 
+                                                    new Date(alert.timestamp).toLocaleString()
+                                                }
+                                            </span>
+                                        </div>
+                                        <div className="alert-message">{alert.message}</div>
+                                    </div>
+                                )) : (
+                                    <div className="no-alerts">✅ No active alerts</div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
