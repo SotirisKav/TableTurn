@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import '../styles/PageTransition.css';
 
 function PageTransition({ children }) {
     const [isVisible, setIsVisible] = useState(false);

@@ -1,0 +1,196 @@
+/* Professional Reservation Page UI */
+.reservation-container {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  min-height: calc(100vh - 80px);
+  padding: 3rem 0;
+}
+
+.reservation-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: start;
+}
+
+.restaurant-details {
+  background: white;
+  border-radius: 24px;
+  padding: 2.5rem;
+  box-shadow: 0 10px 40px rgba(30, 58, 138, 0.1);
+  border: 1px solid rgba(30, 58, 138, 0.1);
+  position: sticky;
+  top: 2rem;
+}
+
+.restaurant-details h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, var(--aegean-blue), var(--deep-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.restaurant-details p {
+  color: var(--text-gray);
+  font-size: 1.1rem;
+  line-height: 1.7;
+  margin-bottom: 1.5rem;
+}
+
+.restaurant-location {
+  display: flex;
+  align-items: center;
+  color: var(--text-gray);
+  font-size: 1rem;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(30, 58, 138, 0.05);
+  border-radius: 12px;
+}
+
+.reservation-form-container {
+  background: white;
+  border-radius: 24px;
+  padding: 3rem;
+  box-shadow: 0 10px 40px rgba(30, 58, 138, 0.1);
+  border: 1px solid rgba(30, 58, 138, 0.1);
+}
+
+.reservation-form-container h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.reservation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reservation-form label {
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.reservation-form input,
+.reservation-form select {
+  padding: 1rem 1.5rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 1rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: white;
+  color: var(--text-dark);
+}
+
+.reservation-form input:focus,
+.reservation-form select:focus {
+  outline: none;
+  border-color: var(--aegean-blue);
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+  transform: translateY(-1px);
+}
+
+.reservation-submit {
+  padding: 1.25rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: 15px;
+  background: linear-gradient(135deg, var(--aegean-blue), var(--deep-blue));
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 25px rgba(30, 58, 138, 0.25);
+  margin-top: 1rem;
+}
+
+.reservation-submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 35px rgba(30, 58, 138, 0.35);
+}
+
+.reservation-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.reservation-divider {
+  text-align: center;
+  margin: 2rem 0;
+  position: relative;
+}
+
+.reservation-divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.reservation-divider span {
+  background: white;
+  padding: 0 1.5rem;
+  color: var(--text-gray);
+  font-weight: 500;
+  position: relative;
+}
+
+.reservation-chat-btn {
+  width: 100%;
+  padding: 1.25rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: 15px;
+  background: transparent;
+  border: 2px solid var(--aegean-blue);
+  color: var(--aegean-blue);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.reservation-chat-btn:hover {
+  background: var(--aegean-blue);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(30, 58, 138, 0.25);
+}
+
+.reservation-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 500;
+  margin-top: 1rem;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+}
+
+@media (max-width: 968px) {
+  .reservation-wrapper {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  
+  .restaurant-details {
+    position: static;
+  }
+}

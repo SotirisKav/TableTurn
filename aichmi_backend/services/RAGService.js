@@ -25,7 +25,8 @@ class RAGService {
             reservation: [
                 'book', 'booking', 'reserve', 'reservation', 'table', 'available', 'availability',
                 'date', 'time', 'party', 'people', 'guests', 'confirm', 'seat', 'seating',
-                'fully booked', 'busy', 'free', 'slot'
+                'fully booked', 'busy', 'free', 'slot', 'biggest', 'largest', 'maximum', 'capacity',
+                'accommodate', 'size', 'how many', 'big table', 'large table'
             ],
             celebration: [
                 'birthday', 'anniversary', 'celebration', 'special', 'occasion', 'romantic',
@@ -230,58 +231,13 @@ class RAGService {
         try {
             console.log(`🔍 Vector semantic table search for: "${query}"`);
             
-            // Generate embedding for the query
-            const queryEmbedding = await EmbeddingService.generateEmbedding(query);
-            console.log(`🧠 Generated query embedding with ${queryEmbedding.length} dimensions`);
-            
-            // Get all tables with embeddings for this restaurant
-            const tablesQuery = `
-                SELECT 
-                    table_id,
-                    table_type,
-                    table_price,
-                    description,
-                    embedding,
-                    (embedding <=> $1::vector) as distance
-                FROM tables 
-                WHERE restaurant_id = $2 
-                    AND embedding IS NOT NULL
-                ORDER BY embedding <=> $1::vector
-                LIMIT 10;
-            `;
-            
-            const queryEmbeddingVector = EmbeddingService.embeddingToVector(queryEmbedding);
-            const tablesResult = await db.query(tablesQuery, [queryEmbeddingVector, restaurantId]);
-            
-            if (!tablesResult || tablesResult.length === 0) {
-                console.log('❌ No tables with embeddings found');
-                // Fallback: get tables without embeddings and generate them
-                return await this.fallbackTableSearch(query, restaurantId);
-            }
-            
-            // Convert distance to similarity score (lower distance = higher similarity)
-            const scoredTables = tablesResult.map(table => {
-                const similarity = 1 - table.distance; // Convert distance to similarity
-                const relevanceScore = Math.max(0, similarity); // Ensure non-negative
-                
-                console.log(`📊 Table "${table.table_type}" similarity: ${similarity.toFixed(4)} (distance: ${table.distance.toFixed(4)})`);
-                
-                return { 
-                    ...table, 
-                    relevanceScore: relevanceScore,
-                    searchableText: `${table.table_type || ''}`.trim()
-                };
-            });
-            
-            // Filter by minimum similarity threshold
-            const filteredTables = scoredTables.filter(table => table.relevanceScore > 0.3); // Adjust threshold as needed
-                
-            console.log(`✅ Found ${filteredTables.length} semantically matching tables`);
-            return filteredTables;
+            // Skip embedding search and use fallback directly for regular querying
+            console.log('❌ No tables with embeddings found');
+            return await this.fallbackTableSearch(query, restaurantId);
                 
         } catch (error) {
             console.error('❌ Error in vector semantic table search:', error);
-            // Fallback to basic search without embeddings
+            // Always fallback on error
             return await this.fallbackTableSearch(query, restaurantId);
         }
     }
@@ -298,6 +254,7 @@ class RAGService {
                     table_id,
                     table_type,
                     table_price,
+                    capacity,
                     description
                 FROM tables 
                 WHERE restaurant_id = $1;
@@ -311,10 +268,21 @@ class RAGService {
             
             // Simple text matching as fallback
             const queryLower = query.toLowerCase();
+            
+            // Check if query is asking for biggest/largest table
+            const isCapacityQuery = queryLower.includes('biggest') || queryLower.includes('largest') || 
+                                   queryLower.includes('maximum') || queryLower.includes('big table') ||
+                                   queryLower.includes('large table') || queryLower.includes('capacity');
+            
             const matchingTables = tablesResult
                 .map(table => {
                     const searchableText = `${table.table_type || ''}`.toLowerCase();
-                    const relevanceScore = searchableText.includes(queryLower) ? 0.5 : 0.1;
+                    let relevanceScore = searchableText.includes(queryLower) ? 0.5 : 0.1;
+                    
+                    // Boost relevance for capacity queries
+                    if (isCapacityQuery) {
+                        relevanceScore = 0.8; // All tables are relevant for capacity queries
+                    }
                     
                     return {
                         ...table,
@@ -323,7 +291,13 @@ class RAGService {
                     };
                 })
                 .filter(table => table.relevanceScore > 0)
-                .sort((a, b) => b.relevanceScore - a.relevanceScore);
+                .sort((a, b) => {
+                    // For capacity queries, sort by capacity first, then relevance
+                    if (isCapacityQuery) {
+                        return b.capacity - a.capacity;
+                    }
+                    return b.relevanceScore - a.relevanceScore;
+                });
             
             console.log(`✅ Fallback found ${matchingTables.length} tables`);
             return matchingTables;
@@ -1076,32 +1050,14 @@ class RAGService {
      */
     async generateAllEmbeddings(restaurantId = null) {
         try {
-            console.log('🚀 Starting embedding generation for all data...');
+            console.log('🚀 Starting embedding generation for menu items only...');
             
             const results = {
-                restaurants: 0,
-                tables: 0,
                 menuItems: 0,
                 errors: []
             };
             
-            // Generate restaurant embeddings
-            try {
-                const restaurantCount = await this.generateRestaurantEmbeddings(restaurantId);
-                results.restaurants = restaurantCount;
-            } catch (error) {
-                results.errors.push(`Restaurant embeddings: ${error.message}`);
-            }
-            
-            // Generate table embeddings
-            try {
-                const tableCount = await this.generateTableEmbeddings(restaurantId);
-                results.tables = tableCount;
-            } catch (error) {
-                results.errors.push(`Table embeddings: ${error.message}`);
-            }
-            
-            // Generate menu item embeddings
+            // Generate menu item embeddings only
             try {
                 const menuCount = await this.generateMenuItemEmbeddings(restaurantId);
                 results.menuItems = menuCount;

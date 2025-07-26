@@ -100,7 +100,7 @@ class MenuPricingAgent extends BaseAgent {
                     ...this.suggestHandoff('reservation', message, {
                         restaurant: menuData.restaurant,
                         userInterest: 'booking_after_menu'
-                    })
+                    }, restaurantId)
                 };
             }
             

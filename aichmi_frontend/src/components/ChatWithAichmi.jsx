@@ -1,28 +1,49 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
+import '../styles/Chat.css';
 
 // Component for parsing and formatting structured text
 function parseStructuredText(text) {
-    // Check if it's a reservation summary
-    if (text.match(/(?:reservation|booking)\s+(?:summary|details|for)/i) || 
-        (text.includes('Date') || text.includes('Time') || text.includes('Guests')) && 
-        (text.includes('@') || text.includes('phone') || text.includes('table'))) {
-        return parseReservationSummary(text);
+    // Ensure we have valid text
+    if (!text || typeof text !== 'string') {
+        return { type: 'paragraph', content: 'Invalid text content' };
     }
     
-    // Check if it's a menu (contains prices and food items)
-    if (text.includes('€') && (text.includes('APPETIZERS') || text.includes('DESSERT') || text.includes('menu') || text.match(/\*\*[^*]+\*\*/))) {
-        return parseMenu(text);
+    try {
+        // Check if it's a reservation summary (only if it contains at least 2 details)
+        if (
+            text.match(/(?:reservation|booking)\s+(?:summary|details|for)/i) ||
+            (
+                (text.includes('Date') || text.includes('Time') || text.includes('Guests')) &&
+                (text.includes('@') || text.includes('phone') || text.includes('table'))
+            )
+        ) {
+            const parsed = parseReservationSummary(text);
+            // Only show reservation card if all required fields are present
+            const requiredFields = ['Date', 'Time', 'Guests', 'Name', 'Email', 'Phone'];
+            const foundFields = parsed.details ? parsed.details.map(d => d.label) : [];
+            const allPresent = requiredFields.every(f => foundFields.includes(f));
+            if (allPresent) {
+                return parsed;
+            }
+        }
+
+        // Check if it's a menu (contains prices and food items)
+        if (text.includes('€') && (text.includes('APPETIZERS') || text.includes('DESSERT') || text.includes('menu') || text.match(/\*\*[^*]+\*\*/))) {
+            return parseMenu(text);
+        }
+
+        // Check if it's a list (contains bullet points or numbers)
+        if (text.includes('•') || /^\d+\./.test(text.trim()) || text.includes('- ')) {
+            return parseList(text);
+        }
+
+        // Default paragraph for conversational text
+        return { type: 'paragraph', content: text };
+    } catch (error) {
+        // Fallback to simple paragraph
+        return { type: 'paragraph', content: text };
     }
-    
-    // Check if it's a list (contains bullet points or numbers)
-    if (text.includes('•') || /^\d+\./.test(text.trim()) || text.includes('- ')) {
-        return parseList(text);
-    }
-    
-    // Default paragraph
-    return { type: 'paragraph', content: text };
 }
 
 function parseMenu(text) {
@@ -205,30 +226,33 @@ function AnimatedText({ text, delay = 0 }) {
     const [isComplete, setIsComplete] = useState(false);
 
     useEffect(() => {
-        // Handle undefined or null text
+        // Always treat any string as valid for display
         if (!text || typeof text !== 'string') {
-            console.error('AnimatedText received invalid text:', text);
-            setDisplayedContent(null);
+            setDisplayedContent({ type: 'paragraph', content: 'Error: Invalid message content' });
             setIsComplete(true);
             return;
         }
 
         setDisplayedContent(null);
         setIsComplete(false);
-        
-        const parsedContent = parseStructuredText(text);
-
-        const timer = setTimeout(() => {
-            setDisplayedContent(parsedContent);
+        try {
+            const parsedContent = parseStructuredText(text);
+            const timer = setTimeout(() => {
+                setDisplayedContent(parsedContent);
+                setIsComplete(true);
+            }, delay);
+            return () => clearTimeout(timer);
+        } catch (error) {
+            setDisplayedContent({ type: 'paragraph', content: text });
             setIsComplete(true);
-        }, delay);
-
-        return () => clearTimeout(timer);
+        }
     }, [text, delay]);
 
     const renderContent = (content) => {
         if (!content) return null;
-
+        if (typeof content === 'string') {
+            return <div>{content}</div>;
+        }
         switch (content.type) {
             case 'menu':
                 return (
@@ -259,22 +283,25 @@ function AnimatedText({ text, delay = 0 }) {
                         ))}
                     </div>
                 );
-            
             case 'reservation':
                 return (
-                    <div className="reservation-summary">
-                        <h4 className="reservation-title">Reservation Details</h4>
-                        <div className="reservation-details">
-                            {content.details.map((detail, idx) => (
-                                <div key={idx} className="reservation-detail">
-                                    <span className="detail-label">{detail.label}:</span>
-                                    <span className="detail-value">{detail.value}</span>
-                                </div>
-                            ))}
+                    <>
+                        <div className="reservation-summary">
+                            <h4 className="reservation-title">Reservation Details</h4>
+                            <div className="reservation-details">
+                                {content.details.map((detail, idx) => (
+                                    <div key={idx} className="reservation-detail">
+                                        <span className="detail-label">{detail.label}:</span>
+                                        <span className="detail-value">{detail.value}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                        <div className="reservation-confirm-message" style={{marginTop: '1rem', fontWeight: 500, color: '#19547b', fontSize: '1.1rem'}}>
+                            Do you confirm these details?
+                        </div>
+                    </>
                 );
-            
             case 'list':
                 return (
                     <ul className="structured-list">
@@ -283,9 +310,9 @@ function AnimatedText({ text, delay = 0 }) {
                         ))}
                     </ul>
                 );
-            
+            case 'paragraph':
             default:
-                return <div>{content.content}</div>;
+                return <div>{content.content || content}</div>;
         }
     };
 
@@ -346,19 +373,41 @@ function ChatWithAichmi() {
                 })
             });
             
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
             const data = await res.json();
             console.log('Received data from backend:', data); // Debug log
             console.log('Response text:', data.response); // Debug the specific response text
             console.log('Response type:', typeof data.response); // Debug the type
             console.log('Data keys:', Object.keys(data)); // See all properties
+            console.log('Multi-agent info:', data.multiAgent); // Debug multi-agent data
+            console.log('Orchestrator info:', data.orchestrator); // Debug orchestrator data
             
             // Validate response before adding to chat
             const responseText = String(data.response || data.text || 'Sorry, I received an empty response.');
             console.log('Final response text to display:', responseText);
             console.log('Response text length:', responseText.length);
             
+            if (!responseText || responseText.trim().length === 0) {
+                console.error('Empty response received from backend');
+                setMessages(msgs => [...msgs, { sender: 'ai', text: 'Sorry, I received an empty response from the server.', timestamp: new Date() }]);
+                return;
+            }
+            
             // Add AI message to chat
-            setMessages(msgs => [...msgs, { sender: 'ai', text: responseText, timestamp: new Date() }]);
+            console.log('Adding message to chat with text:', responseText);
+            console.log('Message text length:', responseText.length);
+            console.log('Message text type:', typeof responseText);
+            setMessages(msgs => {
+                const newMessage = { sender: 'ai', text: responseText, timestamp: new Date() };
+                console.log('New message object:', newMessage);
+                const newMessages = [...msgs, newMessage];
+                console.log('New messages array:', newMessages);
+                console.log('Total messages count:', newMessages.length);
+                return newMessages;
+            });
 
             // Check if this is a redirect response (reservation has been created by the agent)
             if (data.type === 'redirect' && data.reservationDetails) {

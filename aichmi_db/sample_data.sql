@@ -78,6 +78,8 @@ INSERT INTO restaurant_hours (restaurant_id, day_of_week, open_time, close_time)
 -- =====================================
 
 INSERT INTO owners (email, password, first_name, last_name, phone, restaurant_id, stripe_customer_id, subscription_status, oauth_provider, email_verified) VALUES
+-- Admin user (ID 1 - Sotiris)
+('sotiriskavadakis@gmail.com', '$2b$10$JH5kwtPDscy1Rgpk8Ac24eYnJhtbeotDQh2VI6YDgr3W6HfgqoTou', 'Sotiris', 'Kavadakis', '+30-694-9999999', NULL, NULL, NULL, 'local', TRUE),
 ('vasilis@lofaki.gr', '$2b$10$example_hash_1', 'Vasilis', 'Manias', '+30-694-1234567', 1, 'cus_stripe_lofaki123', 'active', 'local', TRUE),
 ('maria@paradiserestaurant.gr', '$2b$10$example_hash_2', 'Maria', 'Papadopoulos', '+30-694-2345678', 2, 'cus_stripe_paradise456', 'active', 'google', TRUE),
 ('nikos@sunsetaverna.gr', '$2b$10$example_hash_3', 'Nikos', 'Stavros', '+30-694-3456789', 3, 'cus_stripe_sunset789', 'active', 'local', TRUE),
@@ -137,31 +139,31 @@ INSERT INTO transfer_prices (price_4_or_less, price_5_to_8, hotel_id, restaurant
 -- 6. TABLES
 -- =====================================
 
-INSERT INTO tables (table_type, table_price, restaurant_id) VALUES
+INSERT INTO tables (table_type, table_price, capacity, restaurant_id) VALUES
 -- Lofaki Restaurant (13 standard, 10 grass, 2 anniversary)
-('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1),
-('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1),
-('standard', 0.00, 1), ('standard', 0.00, 1), ('standard', 0.00, 1),
-('grass', 15.00, 1), ('grass', 15.00, 1), ('grass', 15.00, 1), ('grass', 15.00, 1), ('grass', 15.00, 1),
-('grass', 15.00, 1), ('grass', 15.00, 1), ('grass', 15.00, 1), ('grass', 15.00, 1), ('grass', 15.00, 1),
-('anniversary', 80.00, 1), ('anniversary', 80.00, 1),
+('standard', 0.00, 4, 1), ('standard', 0.00, 2, 1), ('standard', 0.00, 6, 1), ('standard', 0.00, 4, 1), ('standard', 0.00, 4, 1),
+('standard', 0.00, 2, 1), ('standard', 0.00, 4, 1), ('standard', 0.00, 8, 1), ('standard', 0.00, 6, 1), ('standard', 0.00, 4, 1),
+('standard', 0.00, 2, 1), ('standard', 0.00, 4, 1), ('standard', 0.00, 6, 1),
+('grass', 15.00, 4, 1), ('grass', 15.00, 6, 1), ('grass', 15.00, 4, 1), ('grass', 15.00, 8, 1), ('grass', 15.00, 4, 1),
+('grass', 15.00, 6, 1), ('grass', 15.00, 4, 1), ('grass', 15.00, 2, 1), ('grass', 15.00, 4, 1), ('grass', 15.00, 6, 1),
+('anniversary', 80.00, 8, 1), ('anniversary', 80.00, 10, 1),
 
 -- Mykonos Paradise Restaurant (8 standard, 6 grass, 4 anniversary)
-('standard', 10.00, 2), ('standard', 10.00, 2), ('standard', 10.00, 2), ('standard', 10.00, 2),
-('standard', 10.00, 2), ('standard', 10.00, 2), ('standard', 10.00, 2), ('standard', 10.00, 2),
-('grass', 25.00, 2), ('grass', 25.00, 2), ('grass', 25.00, 2), ('grass', 25.00, 2), ('grass', 25.00, 2), ('grass', 25.00, 2),
-('anniversary', 100.00, 2), ('anniversary', 100.00, 2), ('anniversary', 100.00, 2), ('anniversary', 100.00, 2),
+('standard', 10.00, 4, 2), ('standard', 10.00, 6, 2), ('standard', 10.00, 4, 2), ('standard', 10.00, 2, 2),
+('standard', 10.00, 4, 2), ('standard', 10.00, 8, 2), ('standard', 10.00, 6, 2), ('standard', 10.00, 4, 2),
+('grass', 25.00, 6, 2), ('grass', 25.00, 4, 2), ('grass', 25.00, 8, 2), ('grass', 25.00, 6, 2), ('grass', 25.00, 4, 2), ('grass', 25.00, 6, 2),
+('anniversary', 100.00, 8, 2), ('anniversary', 100.00, 10, 2), ('anniversary', 100.00, 12, 2), ('anniversary', 100.00, 8, 2),
 
 -- Santorini Sunset Taverna (10 standard, 6 anniversary)
-('standard', 15.00, 3), ('standard', 15.00, 3), ('standard', 15.00, 3), ('standard', 15.00, 3), ('standard', 15.00, 3),
-('standard', 15.00, 3), ('standard', 15.00, 3), ('standard', 15.00, 3), ('standard', 15.00, 3), ('standard', 15.00, 3),
-('anniversary', 120.00, 3), ('anniversary', 120.00, 3), ('anniversary', 120.00, 3), ('anniversary', 120.00, 3), ('anniversary', 120.00, 3), ('anniversary', 120.00, 3),
+('standard', 15.00, 4, 3), ('standard', 15.00, 2, 3), ('standard', 15.00, 6, 3), ('standard', 15.00, 4, 3), ('standard', 15.00, 4, 3),
+('standard', 15.00, 6, 3), ('standard', 15.00, 2, 3), ('standard', 15.00, 4, 3), ('standard', 15.00, 8, 3), ('standard', 15.00, 4, 3),
+('anniversary', 120.00, 8, 3), ('anniversary', 120.00, 10, 3), ('anniversary', 120.00, 6, 3), ('anniversary', 120.00, 8, 3), ('anniversary', 120.00, 12, 3), ('anniversary', 120.00, 10, 3),
 
 -- Rhodes Castle View (12 standard, 4 grass, 2 anniversary)
-('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4),
-('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4), ('standard', 5.00, 4),
-('grass', 12.00, 4), ('grass', 12.00, 4), ('grass', 12.00, 4), ('grass', 12.00, 4),
-('anniversary', 50.00, 4), ('anniversary', 50.00, 4);
+('standard', 5.00, 4, 4), ('standard', 5.00, 2, 4), ('standard', 5.00, 6, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 6, 4),
+('standard', 5.00, 2, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 8, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 6, 4), ('standard', 5.00, 4, 4),
+('grass', 12.00, 6, 4), ('grass', 12.00, 4, 4), ('grass', 12.00, 8, 4), ('grass', 12.00, 6, 4),
+('anniversary', 50.00, 8, 4), ('anniversary', 50.00, 10, 4);
 
 -- =====================================
 -- 7. MENU ITEMS

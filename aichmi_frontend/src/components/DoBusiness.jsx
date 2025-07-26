@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import '../styles/DoBusiness.css';
 
 // SineLineDivider: animated sine line (not filled)
 const SineLineDivider = ({ height = 32, color = '#0a2c6b', speed = 0.018, strokeWidth = 3 }) => {

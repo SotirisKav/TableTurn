@@ -4,6 +4,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import ScrollFloat from './ScrollFloat';
 import ScrollDescription from './ScrollDescription';
+import '../styles/Subscriptions.css';
 
 gsap.registerPlugin(ScrollTrigger);
 

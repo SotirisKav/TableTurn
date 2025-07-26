@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import '../styles/Reservation.css';
 
 function Reservation() {
     const { restaurantId } = useParams();

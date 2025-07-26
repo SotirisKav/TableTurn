@@ -186,12 +186,13 @@ class BaseAgent {
     /**
      * Suggest handoff to another agent
      */
-    suggestHandoff(targetAgent, message, context = {}) {
+    suggestHandoff(targetAgent, message, context = {}, restaurantId = null) {
         return {
             handoff: {
                 agent: targetAgent,
                 message,
                 context,
+                restaurantId,
                 reason: `${this.name} suggests handoff to ${targetAgent}`
             }
         };

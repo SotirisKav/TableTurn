@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import '../styles/HeroSection.css';
 
 function HeroSection() {
     //array of hero images 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import '../styles/Forms.css';
 
 function Login() {
     const [formData, setFormData] = useState({
@@ -42,8 +43,8 @@ function Login() {
             localStorage.setItem('refreshToken', data.refreshToken);
             localStorage.setItem('user', JSON.stringify(data.owner));
 
-            // Redirect to dashboard or business page
-            navigate('/dashboard');
+            // Redirect to home page and refresh to update auth state
+            window.location.href = '/';
 
         } catch (err) {
             setError(err.message);
@@ -103,7 +104,7 @@ function Login() {
                         <span>Don't have an account?</span>
                     </div>
 
-                    <Link to="/signup" className="auth-link">
+                    <Link to="/subscriptions" className="auth-link">
                         Create Account
                     </Link>
 

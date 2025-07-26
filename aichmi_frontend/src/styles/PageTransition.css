@@ -1,0 +1,61 @@
+/* Page Transitions */
+.page-container {
+  animation: pageEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: calc(100vh - 80px);
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Smooth link transitions */
+a {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Button transitions */
+button {
+  transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+/* Route change loading */
+.route-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced transitions for interactive elements */
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Smooth header navigation hover effects */
+.nav-links a {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0.25rem;
+}
+
+.nav-links a:hover {
+  background: rgba(30, 58, 138, 0.05);
+  transform: none;
+  box-shadow: none;
+}
+
+.nav-links .nav-owner-login:hover {
+  background: rgba(30, 58, 138, 0.05) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}

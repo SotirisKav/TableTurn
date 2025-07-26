@@ -5,6 +5,7 @@
 
 import RestaurantInfoAgent from './RestaurantInfoAgent.js';
 import ReservationAgent from './ReservationAgent.js';
+import TableAvailabilityAgent from './TableAvailabilityAgent.js';
 import MenuPricingAgent from './MenuPricingAgent.js';
 import LocationTransferAgent from './LocationTransferAgent.js';
 import CelebrationAgent from './CelebrationAgent.js';
@@ -15,6 +16,7 @@ class AgentOrchestrator {
     constructor() {
         this.agents = {
             restaurant: new RestaurantInfoAgent(),
+            availability: new TableAvailabilityAgent(),
             reservation: new ReservationAgent(),
             menu: new MenuPricingAgent(),
             location: new LocationTransferAgent(),
@@ -181,14 +183,22 @@ class AgentOrchestrator {
     async analyzeIntent(message, history) {
         const msg = message.toLowerCase();
         
+        // High priority availability keywords that should immediately route to availability agent
+        const highPriorityAvailabilityKeywords = ['biggest', 'largest', 'capacity', 'maximum', 'what tables'];
+        const hasHighPriorityAvailability = highPriorityAvailabilityKeywords.some(keyword => msg.includes(keyword));
+        
+        if (hasHighPriorityAvailability) {
+            console.log('🎯 High priority availability keyword detected, routing to availability agent');
+            return 'availability';
+        }
+        
         // Check recent conversation context for ongoing reservation
         const conversationContext = this.getRecentContext(history);
-        const isReservationFlow = conversationContext.includes('reservation') || 
-                                 conversationContext.includes('book') || 
-                                 conversationContext.includes('table') ||
-                                 conversationContext.includes('resrrvation') ||
+        const isReservationFlow = conversationContext.includes('booking') || 
+                                 conversationContext.includes('book it') || 
+                                 conversationContext.includes('make reservation') ||
+                                 conversationContext.includes('proceed with') ||
                                  conversationContext.includes('finalize') ||
-                                 conversationContext.includes('august') ||
                                  conversationContext.includes('party size') ||
                                  this.conversationState.context.bookingInProgress;
         
@@ -196,12 +206,17 @@ class AgentOrchestrator {
         if (isReservationFlow) {
             // Check for confirmation responses and reservation-related keywords
             const confirmationKeywords = ['yes', 'correct', 'ok', 'okay', 'sure', 'confirm', 'book it', 'go ahead', 'that works'];
-            const reservationKeywords = ['availability', 'available', 'check', 'date', 'time', 'people', 'guests', 'standard', 'grass', 'table', 'fee', 'price', 'euros', 'confirm', 'book', 'reserve', '@', 'email', 'phone', 'name'];
+            const reservationKeywords = ['book', 'reserve', 'booking', 'make reservation', 'standard', 'grass', 'anniversary', 'fee', 'price', 'euros', 'confirm', '@', 'email', 'phone', 'name'];
             
             const hasConfirmation = confirmationKeywords.some(keyword => msg.includes(keyword));
             const hasReservationKeyword = reservationKeywords.some(keyword => msg.includes(keyword));
             
-            if (hasConfirmation || hasReservationKeyword || /(\\d+|august|july|september|january|february|march|april|may|june|october|november|december|\\d+\\s*(pm|am)|party|people|guests|email|phone|@)/i.test(message)) {
+            // In reservation flow, also treat simple numeric responses, table types, and common responses as reservation intent
+            const isNumericResponse = /^\d+$/.test(msg.trim());
+            const isTableType = ['standard', 'grass', 'anniversary'].includes(msg.trim());
+            const isSimpleResponse = msg.trim().length <= 15 && !msg.includes(' ');
+            
+            if (hasConfirmation || hasReservationKeyword || isNumericResponse || isTableType || isSimpleResponse || /(\\d+|august|july|september|january|february|march|april|may|june|october|november|december|\\d+\\s*(pm|am)|party|people|guests|email|phone|@)/i.test(message)) {
                 return 'reservation';
             }
         }
@@ -213,9 +228,19 @@ class AgentOrchestrator {
         
         // Intent patterns with priority order
         const intentPatterns = {
+            availability: [
+                'available', 'availability', 'check', 'biggest', 'largest', 'capacity', 'maximum',
+                'what tables', 'table options', 'accommodate', 'fit', 'seat', 'seating', 'how many',
+                'big table', 'large table', 'size', 'what size', 'table types', 'options'
+            ],
             reservation: [
-                'book', 'reserve', 'table', 'reservation', 'reserv', 'available', 'date', 'time',
-                'party', 'people', 'guests', 'confirm', 'booking', 'resrrvation'
+                'book', 'reserve', 'reservation', 'reserv', 'booking', 'resrrvation', 'make reservation',
+                'want to book', 'proceed', 'go ahead', 'confirm', 'finalize', 'yes please', 'book it',
+                'reserve it', 'let me book', 'i want to reserve'
+            ],
+            datetime: [
+                'date', 'time', 'tomorrow', 'today', 'day', 'what day', 'when', 'monday', 'tuesday', 
+                'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'next week', 'next month'
             ],
             menu: [
                 'menu', 'dish', 'food', 'eat', 'price', 'cost', 'order', 'meal',
@@ -267,6 +292,7 @@ class AgentOrchestrator {
     selectAgent(intent) {
         const agentMap = {
             restaurant: this.agents.restaurant,
+            availability: this.agents.availability,
             reservation: this.agents.reservation,
             menu: this.agents.menu,
             location: this.agents.location,
@@ -287,9 +313,12 @@ class AgentOrchestrator {
         // Update context based on intent
         if (intent === 'reservation') {
             this.conversationState.context.bookingInProgress = true;
+        } else if (intent === 'availability') {
+            // Availability queries don't trigger booking flow
+            this.conversationState.context.availabilityInProgress = true;
         }
         
-        // Track reservation progress
+        // Track reservation progress only when booking is in progress
         if (this.conversationState.context.bookingInProgress) {
             this.extractReservationData(message);
         }
@@ -354,26 +383,48 @@ class AgentOrchestrator {
     detectMultiAgentQuery(message) {
         const msg = message.toLowerCase();
         
+        // Don't trigger multi-agent for simple responses in ongoing conversations
+        const isSimpleResponse = msg.trim().length <= 15 && !msg.includes(' ');
+        const isNumericResponse = /^\d+$/.test(msg.trim());
+        const isTableType = ['standard', 'grass', 'anniversary'].includes(msg.trim());
+        
+        if (isSimpleResponse || isNumericResponse || isTableType) {
+            return false;
+        }
+        
         // Check for compound queries (contains 'and', 'also', etc.)
         const compoundIndicators = ['and', 'also', 'plus', 'what about', 'additionally'];
         const hasCompoundIndicator = compoundIndicators.some(indicator => msg.includes(indicator));
         
         // Check for multiple domain keywords
         const domainKeywords = {
-            reservation: ['book', 'reserve', 'table', 'date', 'time', 'friday'],
+            availability: ['available', 'biggest', 'largest', 'capacity', 'check'],
+            reservation: ['book', 'reserve', 'booking', 'make reservation'],
+            datetime: ['date', 'time', 'friday', 'tomorrow', 'today', 'day', 'what day', 'when'],
             menu: ['menu', 'dish', 'food', 'gluten', 'vegetarian', 'main course'],
             celebration: ['romantic', 'birthday', 'anniversary', 'special'],
             location: ['transfer', 'hotel', 'pickup', 'airport']
         };
         
         let domainMatches = 0;
+        const matchedDomains = [];
         for (const [domain, keywords] of Object.entries(domainKeywords)) {
             if (keywords.some(keyword => msg.includes(keyword))) {
                 domainMatches++;
+                matchedDomains.push(domain);
             }
         }
         
-        // Query requires multi-agent if it has compound indicators or matches multiple domains
+        // Don't trigger multi-agent for availability + datetime combinations (they're related)
+        const isAvailabilityWithDateTime = matchedDomains.length === 2 && 
+                                          matchedDomains.includes('availability') && 
+                                          matchedDomains.includes('datetime');
+        
+        if (isAvailabilityWithDateTime) {
+            return false;
+        }
+        
+        // Query requires multi-agent if it has compound indicators or matches multiple unrelated domains
         return hasCompoundIndicator || domainMatches > 1;
     }
 
@@ -442,8 +493,18 @@ class AgentOrchestrator {
      * Consolidate multi-agent response
      */
     consolidateMultiAgentResponse(finalResponse, originalMessage) {
+        // Extract agent info from delegation chain
+        const lastAgent = this.conversationState.delegationChain[this.conversationState.delegationChain.length - 1];
+        
         return {
             ...finalResponse,
+            // Preserve orchestrator metadata for consistency
+            orchestrator: {
+                intent: lastAgent?.intent || 'unknown',
+                agent: lastAgent?.agent || 'unknown',
+                conversationState: this.conversationState,
+                timestamp: new Date().toISOString()
+            },
             multiAgent: {
                 workflow: 'multi-agent',
                 delegationChain: this.conversationState.delegationChain,
@@ -505,7 +566,14 @@ class AgentOrchestrator {
         // Get last 3 messages for context
         const recentMessages = history.slice(-3);
         return recentMessages
-            .map(msg => `${msg.message} ${msg.response || ''}`)
+            .map(msg => {
+                // Handle both old format (message/response) and new format (sender/text)
+                if (msg.text) {
+                    return msg.text;
+                } else {
+                    return `${msg.message || ''} ${msg.response || ''}`;
+                }
+            })
             .join(' ')
             .toLowerCase();
     }

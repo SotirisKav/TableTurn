@@ -1,0 +1,153 @@
+/* Replace the confirmation CSS in your App.css with this updated version: */
+
+/* Confirmation Page - Full Screen */
+.confirmation-page {
+  min-height: 100vh;
+  width: 100vw;
+  padding: 120px 0 2rem 0;
+  background: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: calc(50% - 50vw); /* This centers it properly */
+}
+
+.confirmation-content {
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 3rem 2.5rem;
+  width: 90%;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.confirmation-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.confirmation-header h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--aegean-blue);
+  margin-bottom: 0.5rem;
+}
+
+.confirmation-header p {
+  font-size: 1.1rem;
+  color: var(--text-gray);
+}
+
+.reservation-summary {
+  margin-bottom: 2rem;
+}
+
+.reservation-summary h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 1.5rem;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-item.special {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 8px;
+  border-bottom: none;
+  margin-top: 0.5rem;
+}
+
+.detail-item span:first-child {
+  font-weight: 500;
+  color: var(--text-gray);
+}
+
+.detail-item span:last-child {
+  font-weight: 600;
+  color: var(--text-dark);
+  text-align: right;
+}
+
+.confirmation-info {
+  background: #f0f9ff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.confirmation-info p {
+  margin-bottom: 0.5rem;
+  color: var(--text-gray);
+}
+
+.confirmation-info p:last-child {
+  margin-bottom: 0;
+}
+
+.confirmation-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.confirmation-actions .cta-button {
+  flex: 1;
+  max-width: 200px;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .confirmation-page {
+    padding: 100px 1rem 1rem 1rem;
+    width: 100vw;
+  }
+  
+  .confirmation-content {
+    padding: 2rem 1.5rem;
+    width: 100%;
+    max-width: none;
+  }
+  
+  .confirmation-header h1 {
+    font-size: 1.6rem;
+  }
+  
+  .detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .detail-item span:last-child {
+    text-align: left;
+  }
+  
+  .confirmation-actions {
+    flex-direction: column;
+  }
+  
+  .confirmation-actions .cta-button {
+    max-width: none;
+  }
+}

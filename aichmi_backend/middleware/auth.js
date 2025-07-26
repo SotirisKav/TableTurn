@@ -65,8 +65,8 @@ export const checkDashboardAccess = async (req, res, next) => {
             return res.status(403).json({ error: 'User not found' });
         }
 
-        // Admin can access any restaurant dashboard (ONLY user ID 6 - Sotiris)
-        if (userId === 6) {
+        // Admin can access any restaurant dashboard (ONLY user ID 1 - Sotiris)
+        if (userId === 1) {
             req.user.role = 'admin';
             return next();
         }

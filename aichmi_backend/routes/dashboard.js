@@ -17,11 +17,20 @@ router.get('/tier1/:restaurantId', checkDashboardAccess, async (req, res) => {
         // Today's reservations with detailed breakdown
         const [todayReservations] = await db.execute(`
             SELECT 
+                reservation_id,
                 reservation_time,
                 reservation_name,
+                reservation_email,
+                reservation_phone,
                 guests,
+                table_type,
                 table_id,
                 celebration_type,
+                cake,
+                cake_price,
+                flowers,
+                flowers_price,
+                hotel_name,
                 created_at,
                 'confirmed' as status
             FROM reservation 
@@ -376,8 +385,8 @@ router.get('/user-info', async (req, res) => {
 
         const userId = req.user.id;
         
-        // Determine if user is admin (ONLY user ID 6 - Sotiris)
-        const isAdmin = userId === 6;
+        // Determine if user is admin (ONLY user ID 1 - Sotiris)
+        const isAdmin = userId === 1;
 
         res.json({
             restaurantId: owners[0].restaurant_id,
@@ -388,6 +397,97 @@ router.get('/user-info', async (req, res) => {
     } catch (error) {
         console.error('User info error:', error);
         res.status(500).json({ error: 'Failed to fetch user info' });
+    }
+});
+
+// Get reservations for a specific date
+router.get('/reservations/:restaurantId/:date', checkDashboardAccess, async (req, res) => {
+    try {
+        const restaurantId = parseInt(req.params.restaurantId);
+        const requestedDate = req.params.date;
+        
+        // Get detailed reservations for the specific date
+        const [reservations] = await db.execute(`
+            SELECT 
+                reservation_id,
+                reservation_time,
+                reservation_name,
+                reservation_email,
+                reservation_phone,
+                guests,
+                table_type,
+                table_id,
+                celebration_type,
+                cake,
+                cake_price,
+                flowers,
+                flowers_price,
+                hotel_name,
+                created_at,
+                'confirmed' as status
+            FROM reservation 
+            WHERE restaurant_id = $1 AND DATE(reservation_date) = $2
+            ORDER BY reservation_time
+        `, [restaurantId, requestedDate]);
+
+        // Group by time slots for better organization
+        const timeSlots = {};
+        reservations.forEach(res => {
+            const hour = new Date(`1970-01-01T${res.reservation_time}`).getHours();
+            const timeSlot = `${hour}:00`;
+            if (!timeSlots[timeSlot]) {
+                timeSlots[timeSlot] = { tables: 0, guests: 0, reservations: [] };
+            }
+            timeSlots[timeSlot].tables += 1;
+            timeSlots[timeSlot].guests += res.guests;
+            timeSlots[timeSlot].reservations.push({
+                id: res.reservation_id,
+                name: res.reservation_name,
+                email: res.reservation_email,
+                phone: res.reservation_phone,
+                guests: res.guests,
+                table_type: res.table_type,
+                table: res.table_id,
+                celebration: res.celebration_type || 'none',
+                cake: res.cake,
+                cake_price: res.cake_price,
+                flowers: res.flowers,
+                flowers_price: res.flowers_price,
+                hotel_name: res.hotel_name,
+                status: res.status,
+                created_at: res.created_at,
+                time: res.reservation_time
+            });
+        });
+
+        res.json({
+            date: requestedDate,
+            totalReservations: reservations.length,
+            totalGuests: reservations.reduce((sum, r) => sum + r.guests, 0),
+            timeSlots: timeSlots,
+            allReservations: reservations.map(r => ({
+                id: r.reservation_id,
+                name: r.reservation_name,
+                email: r.reservation_email,
+                phone: r.reservation_phone,
+                guests: r.guests,
+                table_type: r.table_type,
+                table: r.table_id,
+                celebration: r.celebration_type || 'none',
+                cake: r.cake,
+                cake_price: r.cake_price,
+                flowers: r.flowers,
+                flowers_price: r.flowers_price,
+                hotel_name: r.hotel_name,
+                status: r.status,
+                created_at: r.created_at,
+                time: r.reservation_time
+            }))
+        });
+
+    } catch (error) {
+        console.error('Get reservations error:', error);
+        res.status(500).json({ error: 'Failed to fetch reservations' });
     }
 });
 

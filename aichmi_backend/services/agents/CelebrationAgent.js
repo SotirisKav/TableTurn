@@ -42,7 +42,7 @@ class CelebrationAgent extends BaseAgent {
                         restaurant: celebrationData.restaurant,
                         userInterest: 'celebration_booking',
                         celebrationDetails: this.extractCelebrationDetails(message)
-                    })
+                    }, restaurantId)
                 };
             }
             

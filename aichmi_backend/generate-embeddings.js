@@ -3,7 +3,7 @@
  * Generate Embeddings for Sample Data
  * 
  * Run this script after populating your database with sample_data.sql
- * to generate embeddings for all restaurants, menu items, and tables.
+ * to generate embeddings for menu items only.
  * 
  * Usage: node generate-embeddings.js
  */
@@ -14,7 +14,7 @@ import RAGService from './services/RAGService.js';
 
 dotenv.config();
 
-console.log('🧠 Generating embeddings for existing data...\n');
+console.log('🧠 Generating embeddings for menu items only...\n');
 
 async function generateEmbeddings() {
     try {
@@ -34,30 +34,22 @@ async function generateEmbeddings() {
         // Check if data exists
         console.log('📊 Checking existing data...');
         
-        let restaurantCount = 0;
         let menuCount = 0;
-        let tableCount = 0;
 
         try {
-            const restaurantResult = await db.query('SELECT COUNT(*) FROM restaurant');
             const menuResult = await db.query('SELECT COUNT(*) FROM menu_item');
-            const tableResult = await db.query('SELECT COUNT(*) FROM tables');
 
             // Handle different possible result structures
-            restaurantCount = parseInt(restaurantResult.rows?.[0]?.count || restaurantResult[0]?.count || 0);
             menuCount = parseInt(menuResult.rows?.[0]?.count || menuResult[0]?.count || 0);
-            tableCount = parseInt(tableResult.rows?.[0]?.count || tableResult[0]?.count || 0);
         } catch (error) {
             console.error('   Error checking data counts:', error.message);
             console.error('   Make sure your database tables exist');
         }
 
-        console.log(`   - Restaurants: ${restaurantCount}`);
-        console.log(`   - Menu items: ${menuCount}`);
-        console.log(`   - Tables: ${tableCount}\n`);
+        console.log(`   - Menu items: ${menuCount}\n`);
 
-        if (restaurantCount === 0) {
-            console.error('❌ No restaurants found in database');
+        if (menuCount === 0) {
+            console.error('❌ No menu items found in database');
             console.error('   Please run sample_data.sql first to populate your database');
             process.exit(1);
         }
@@ -70,9 +62,7 @@ async function generateEmbeddings() {
 
         console.log('✅ Embedding generation completed!\n');
         console.log('📈 Results:');
-        console.log(`   - Restaurants: ${results.restaurants} embeddings generated`);
         console.log(`   - Menu items: ${results.menuItems} embeddings generated`);
-        console.log(`   - Tables: ${results.tables} embeddings generated`);
 
         if (results.errors.length > 0) {
             console.log('\n⚠️  Some errors occurred:');
@@ -96,17 +86,17 @@ async function generateEmbeddings() {
                 console.log(`      - ${item.name} (€${item.price}) - Score: ${item.relevanceScore.toFixed(3)}`);
             });
 
-            // Test table search
-            const tableTest = await RAGService.hybridSearch(
-                'romantic dinner',
-                'tables',
-                {},
+            // Test dessert search
+            const dessertTest = await RAGService.hybridSearch(
+                'sweet dessert',
+                'menu_item',
+                { available: true },
                 2
             );
             
-            console.log(`   Table search test: Found ${tableTest.length} results`);
-            tableTest.forEach(table => {
-                console.log(`      - ${table.table_type} (€${table.table_price}) - Score: ${table.relevanceScore.toFixed(3)}`);
+            console.log(`   Dessert search test: Found ${dessertTest.length} results`);
+            dessertTest.forEach(item => {
+                console.log(`      - ${item.name} (€${item.price}) - Score: ${item.relevanceScore.toFixed(3)}`);
             });
 
         } catch (error) {

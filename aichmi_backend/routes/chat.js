@@ -14,6 +14,9 @@ router.post('/', async (req, res) => {
     
     const { message, history = [], restaurantId = null, useMultiAgent = true } = req.body;
     
+    // Use default restaurant ID (1 for Lofaki Taverna) if none provided
+    const effectiveRestaurantId = restaurantId || 1;
+    
     if (!message) {
       console.log('No message provided');
       return res.status(400).json({ error: 'Message is required' });
@@ -23,9 +26,9 @@ router.post('/', async (req, res) => {
     
     if (useMultiAgent) {
       console.log('🎭 Using Multi-Agent System');
-      console.log('Processing with orchestrator:', { message, historyLength: history.length, restaurantId });
+      console.log('Processing with orchestrator:', { message, historyLength: history.length, restaurantId: effectiveRestaurantId });
       
-      result = await orchestrator.processMessage(message, history, restaurantId);
+      result = await orchestrator.processMessage(message, history, effectiveRestaurantId);
       
       console.log('=== MULTI-AGENT RESPONSE READY ===');
       console.log('Active agent:', result.orchestrator?.agent);
@@ -33,9 +36,9 @@ router.post('/', async (req, res) => {
       console.log('Response type:', result.type);
     } else {
       console.log('🤖 Using Legacy Single-Agent System');
-      console.log('Calling askGemini with:', { message, historyLength: history.length, restaurantId });
+      console.log('Calling askGemini with:', { message, historyLength: history.length, restaurantId: effectiveRestaurantId });
       
-      result = await askGemini(message, history, restaurantId);
+      result = await askGemini(message, history, effectiveRestaurantId);
       
       console.log('=== SINGLE-AGENT RESPONSE READY ===');
       console.log('Response type:', result.type);

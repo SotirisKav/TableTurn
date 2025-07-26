@@ -1,0 +1,369 @@
+/* Subscriptions Page Styling */
+.subscriptions-page {
+  min-height: 100vh;
+  width: 100vw;
+  padding: 100px 0 2rem 0;
+  background: var(--white);
+  margin-left: calc(50% - 50vw);
+}
+
+.subscriptions-hero {
+  text-align: center;
+  padding: 4rem 2rem 2rem 2rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+}
+
+.subscriptions-title {
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-weight: 800;
+  color: var(--aegean-blue);
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.subscriptions-subtitle {
+  font-size: clamp(1.1rem, 3vw, 1.3rem);
+  color: var(--text-gray);
+  margin-bottom: 3rem;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6;
+}
+
+.subscriptions-stats {
+  display: flex;
+  justify-content: center;
+  gap: clamp(2rem, 6vw, 4rem);
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  color: var(--aegean-blue);
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: clamp(0.9rem, 2vw, 1.1rem);
+  color: var(--text-gray);
+  font-weight: 600;
+}
+
+.pricing-section {
+  padding: 4rem 2rem;
+  background: var(--cream);
+  text-align: center;
+}
+
+.pricing-title {
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  font-weight: 700;
+  color: var(--aegean-blue);
+  margin-bottom: 1rem;
+}
+
+.pricing-subtitle {
+  font-size: 1.2rem;
+  color: var(--text-gray);
+  margin-bottom: 3rem;
+}
+
+.single-plan-container {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.pricing-card {
+  background: var(--white);
+  border-radius: 20px;
+  padding: 2.5rem 2rem;
+  box-shadow: 0 8px 32px rgba(30, 58, 138, 0.15);
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.pricing-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 48px rgba(30, 58, 138, 0.25);
+}
+
+.popular-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--aegean-blue);
+  color: var(--white);
+  padding: 0.5rem 1.5rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.plan-header {
+  margin-bottom: 2rem;
+}
+
+.plan-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--aegean-blue);
+  margin-bottom: 1rem;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.price-amount {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--aegean-blue);
+}
+
+.price-period {
+  font-size: 1.2rem;
+  color: var(--text-gray);
+}
+
+.plan-features {
+  list-style: none;
+  margin-bottom: 2rem;
+  text-align: left;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.feature-item:last-child {
+  border-bottom: none;
+}
+
+.feature-check {
+  color: var(--aegean-blue);
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.plan-button {
+  width: 100%;
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  border-radius: 12px;
+}
+
+.subscriptions-benefits {
+  padding: 4rem 2rem;
+  background: var(--white);
+}
+
+/* Benefits Section - ScrollFloat Integration */
+.benefits-content {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4rem;
+}
+
+.benefit-block {
+  text-align: center;
+  padding: 6rem 0; /* Increased padding for more space */
+  min-height: 400px; /* More space for staggered animations */
+}
+
+.benefit-title-container {
+  margin-bottom: 4rem; /* More space between title and description */
+  min-height: 120px;
+}
+
+.benefit-title-text {
+  font-size: clamp(1.8rem, 6vw, 4rem) !important;
+  font-weight: 800 !important;
+  color: var(--aegean-blue) !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.benefit-description {
+  font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+  line-height: 1.7;
+  color: var(--text-gray);
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  font-weight: 500;
+}
+
+/* Mobile adjustments for benefits */
+@media (max-width: 768px) {
+  .benefits-content {
+    gap: 3rem;
+  }
+  
+  .benefit-block {
+    padding: 1.5rem 0;
+  }
+  
+  .benefit-title-container {
+    margin-bottom: 1.5rem;
+  }
+  
+  .benefit-description {
+    padding: 0 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .benefits-content {
+    gap: 2.5rem;
+  }
+  
+  .benefit-block {
+    padding: 1rem 0;
+  }
+  
+  .benefit-title-container {
+    margin-bottom: 1rem;
+  }
+}
+
+/* Remove or update the old benefit-paragraph styles */
+.benefit-paragraph {
+  /* Remove this entire block or comment it out since we're not using it anymore */
+  display: none;
+}
+
+.scroll-float {
+  overflow: visible; /* Changed from hidden to visible */
+  margin: 2rem 0; /* Add some margin for better spacing */
+}
+
+.scroll-float-text {
+  display: inline-block;
+  font-size: clamp(1.8rem, 6vw, 4rem) !important;
+  font-weight: 800 !important;
+  color: var(--aegean-blue) !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.char {
+  display: inline-block;
+  will-change: transform, opacity;
+  transform-origin: 50% 0%;
+}
+
+/* Add these updated styles to your App.css */
+
+/* Benefits Section - Better Spacing and Timing */
+.benefit-block {
+  text-align: center;
+  padding: 6rem 0; /* Increased padding for more space */
+  min-height: 400px; /* More space for staggered animations */
+}
+
+.benefit-title-container {
+  margin-bottom: 4rem; /* More space between title and description */
+  min-height: 120px;
+}
+
+.benefit-description-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  min-height: 100px; /* Ensure space for description */
+}
+
+/* ScrollDescription improvements - Better text handling */
+.scroll-description {
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.scroll-description-text {
+  display: block; /* Changed from inline to block */
+  font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+  line-height: 1.8;
+  color: var(--text-gray);
+  font-weight: 500;
+  text-align: center;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word; /* Added for better word wrapping */
+  hyphens: auto; /* Added for better text flow */
+}
+
+.word {
+  display: inline;
+  will-change: transform, opacity;
+  transform-origin: 50% 50%;
+  word-break: keep-all; /* Prevent words from breaking */
+}
+
+.word-space {
+  display: inline;
+  will-change: transform, opacity;
+  white-space: pre; /* Preserve spaces */
+}
+
+/* Ensure proper text wrapping on all screen sizes */
+.benefit-description-container {
+  max-width: 900px; /* Increased from 800px */
+  margin: 0 auto;
+  padding: 0 2rem;
+  min-height: 100px;
+  width: 100%; /* Ensure full width usage */
+}
+
+/* Enhanced mobile text handling */
+@media (max-width: 768px) {
+  .benefit-description-container {
+    max-width: 100%; /* Use full width on mobile */
+    padding: 0 1rem;
+  }
+  
+  .scroll-description-text {
+    font-size: clamp(1rem, 2.2vw, 1.2rem);
+    line-height: 1.7;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .benefit-description-container {
+    padding: 0 1rem; /* Increased padding for mobile */
+  }
+  
+  .scroll-description-text {
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+}
+
+/* Ensure text doesn't overflow on very small screens */
+@media (max-width: 320px) {
+  .benefit-description-container {
+    padding: 0 0.5rem;
+  }
+}

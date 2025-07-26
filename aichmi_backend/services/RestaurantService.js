@@ -242,7 +242,8 @@ class RestaurantService {
             `;
             
             const result = await db.query(query, [restaurantId]);
-            return result.rows || [];
+            // db.query already returns result.rows directly, not a result object with .rows
+            return result || [];
         } catch (error) {
             console.error('Error fetching table inventory:', error);
             // Return empty array if tables don't exist
@@ -264,7 +265,8 @@ class RestaurantService {
             `;
             
             const result = await db.query(query, [restaurantId]);
-            return result.rows || [];
+            // db.query already returns result.rows directly, not a result object with .rows
+            return result || [];
         } catch (error) {
             console.error('Error fetching table types:', error);
             return [];

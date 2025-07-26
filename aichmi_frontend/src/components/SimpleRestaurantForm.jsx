@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import LocationPicker from './LocationPicker';
+import '../styles/Forms.css';
 
 const SimpleRestaurantForm = () => {
     const [currentStep, setCurrentStep] = useState(1);

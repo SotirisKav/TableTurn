@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import '../styles/Header.css';
 
 function Header() {
     const [user, setUser] = useState(null);
@@ -51,10 +52,9 @@ function Header() {
                     <li>
                       <Link 
                         to={userInfo.role === 'admin' ? '/dashboard' : `/dashboard/${userInfo.restaurantId}`} 
-                        className="nav-dashboard"
+                        className={`nav-dashboard ${userInfo.role === 'admin' ? 'admin-nav' : ''}`}
                       >
-                        Dashboard
-                        {userInfo.role === 'admin' && <span className="admin-badge">Admin</span>}
+                        {userInfo.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'}
                       </Link>
                     </li>
                     <li>

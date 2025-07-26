@@ -53,7 +53,7 @@ class RestaurantInfoAgent extends BaseAgent {
                     ...this.suggestHandoff('reservation', message, {
                         restaurant: restaurantData,
                         userInterest: 'booking'
-                    })
+                    }, restaurantId)
                 };
             }
             
@@ -64,7 +64,7 @@ class RestaurantInfoAgent extends BaseAgent {
                     ...this.suggestHandoff('menu', message, {
                         restaurant: restaurantData,
                         userInterest: 'menu'
-                    })
+                    }, restaurantId)
                 };
             }
             
@@ -119,6 +119,7 @@ PERSONALITY:
 - Match the user's energy level - if they say "hey", respond simply
 - For basic greetings, keep responses short and welcoming
 - Only elaborate when asked specific questions
+- NEVER provide detailed restaurant information during reservation discussions
 
 RESTAURANT: ${restaurant.name}, ${restaurant.address || restaurant.area}
 CUISINE: ${restaurant.cuisine || 'Greek'}
@@ -127,15 +128,17 @@ ${hours?.length > 0 ? `HOURS: ${hours.map(h => `${h.day_of_week}: ${h.open_time}
 
 RESPONSE GUIDELINES:
 - For simple greetings ("hey", "hello", "hi"): Respond with a brief, friendly greeting and ask how you can help
-- For specific questions: Provide relevant details about the restaurant
-- For reservations: Offer to help with booking
+- For specific questions about the restaurant: Provide relevant details about the restaurant
+- For reservations: Keep responses short and focus on the reservation task
 - For menu questions: Offer to discuss menu options
+- CRITICAL: If the conversation is about reservations/tables/bookings, do NOT provide restaurant details unless specifically asked
 - Always end with a simple question to continue the conversation
 
 EXAMPLE RESPONSES:
 - User: "hey" → "Hi there! How can I help you today with ${restaurant.name}?"
 - User: "hello" → "Hello! Welcome to ${restaurant.name}. What can I help you with?"
-- User: "tell me about the restaurant" → [Then provide detailed information]`;
+- User: "tell me about the restaurant" → [Then provide detailed information]
+- User: "10" (in reservation context) → "Perfect! A party of 10. What date were you thinking?"`;
     }
 
     buildPrompt(message, conversationHistory, restaurantData) {
@@ -147,7 +150,7 @@ EXAMPLE RESPONSES:
         
         prompt += `Current user message: ${message}
 
-Please provide helpful information about ${restaurantData.restaurant.name}. Focus on what makes this restaurant special, the atmosphere, location details, operating hours, and general information that would interest a potential guest.`;
+Please respond appropriately to the user's message about ${restaurantData.restaurant.name}. If they're asking about reservations or tables, focus on helping with that task. Only provide restaurant details if specifically asked about the restaurant itself.`;
 
         return prompt;
     }

@@ -20,24 +20,41 @@ class ReservationAgent extends BaseAgent {
         try {
             console.log(`📅 ${this.name} processing:`, message);
 
+            // Check if this is a direct booking request that needs availability checking
+            const isDirectBookingRequest = this.isDirectBookingRequest(message, history);
+            let availabilityResult = null;
+            
+            if (isDirectBookingRequest) {
+                // Extract booking details and check availability
+                const bookingDetails = this.extractBookingDetails(message, history);
+                if (bookingDetails.date && bookingDetails.partySize) {
+                    console.log('🔍 Checking availability for direct booking request:', bookingDetails);
+                    availabilityResult = await this.checkAvailability(
+                        restaurantId, 
+                        bookingDetails.date, 
+                        bookingDetails.tableType || 'standard'
+                    );
+                }
+            }
+
             // Use RAG to retrieve relevant data
             const ragData = await this.retrieveRAGData(message, restaurantId);
             
-            // Check if query contains table ambiance/style requests or delegation from another agent
-            const ambianceTerms = ['quiet', 'romantic', 'private', 'intimate', 'cozy', 'peaceful', 'atmosphere', 'ambiance', 'table', 'seating'];
-            const hasAmbianceQuery = ambianceTerms.some(term => 
+            // Disable semantic table search for basic availability queries
+            // Only perform semantic search for very specific ambiance/style requests
+            const specificAmbianceTerms = ['romantic', 'private', 'intimate', 'cozy', 'peaceful', 'atmosphere', 'ambiance'];
+            const hasSpecificAmbianceQuery = specificAmbianceTerms.some(term => 
                 message.toLowerCase().includes(term)
             );
             
-            // Check if this is a delegation from MenuPricingAgent
-            const isDelegatedQuery = context?.delegatedFromAgent === 'MenuPricingAgent' || 
-                                   message.toLowerCase().includes('also') ||
-                                   message.toLowerCase().includes('and');
+            // Check if this is a delegation from MenuPricingAgent with specific context
+            const isDelegatedQuery = context?.delegatedFromAgent === 'MenuPricingAgent' && 
+                                   (message.toLowerCase().includes('romantic') || message.toLowerCase().includes('ambiance'));
             
-            // Perform semantic table search if ambiance query detected
+            // Only perform semantic table search for specific ambiance queries, not general availability
             let semanticTables = [];
-            if (hasAmbianceQuery || isDelegatedQuery) {
-                console.log('🔍 Performing semantic table search for ambiance/booking query');
+            if (hasSpecificAmbianceQuery || isDelegatedQuery) {
+                console.log('🔍 Performing semantic table search for specific ambiance query');
                 semanticTables = await RAGService.semanticTableSearch(message, restaurantId);
                 
                 if (semanticTables.length > 0) {
@@ -78,8 +95,8 @@ class ReservationAgent extends BaseAgent {
             // Build conversation context
             const conversationHistory = this.buildConversationHistory(history);
             
-            // Create full prompt
-            const fullPrompt = this.buildPrompt(message, conversationHistory, reservationData);
+            // Create full prompt with availability information if available
+            const fullPrompt = this.buildPrompt(message, conversationHistory, reservationData, availabilityResult);
             
             // Generate response with RAG context
             const aiResponse = await this.generateResponse(fullPrompt, systemPrompt, ragData);
@@ -94,7 +111,7 @@ class ReservationAgent extends BaseAgent {
                     ...this.suggestHandoff('celebration', message, {
                         restaurant: reservationData.restaurant,
                         userInterest: 'celebration'
-                    })
+                    }, restaurantId)
                 };
             }
             
@@ -211,20 +228,104 @@ class ReservationAgent extends BaseAgent {
         }
     }
 
+    /**
+     * Check availability for a specific date, time, and table type
+     */
+    async checkAvailability(restaurantId, date, tableType = 'standard') {
+        try {
+            const available = await RestaurantService.isTableAvailable({
+                venueId: restaurantId,
+                tableType,
+                reservationDate: date
+            });
+            
+            if (!available) {
+                // Get count of existing reservations for more informative message
+                const reservationCount = await this.getReservationCount(restaurantId, date, tableType);
+                
+                // Use getTableInventory instead of getTableTypes to get total_tables
+                const tableInventory = await RestaurantService.getTableInventory(restaurantId);
+                const maxTables = tableInventory.find(t => t.table_type === tableType)?.total_tables || 0;
+                
+                return {
+                    available: false,
+                    message: `I'm sorry, but we're fully booked for ${tableType} tables on ${date}. We currently have ${reservationCount} out of ${maxTables} ${tableType} tables reserved. Would you like to try a different date or table type?`,
+                    reservationCount,
+                    maxTables
+                };
+            }
+            
+            return {
+                available: true,
+                message: `Great news! ${tableType} tables are available on ${date}.`
+            };
+            
+        } catch (error) {
+            console.error('❌ Error checking availability:', error);
+            return {
+                available: false,
+                message: "I'm having trouble checking availability right now. Please try again in a moment.",
+                error: true
+            };
+        }
+    }
+    
+    /**
+     * Get reservation count for a specific date and table type
+     */
+    async getReservationCount(restaurantId, date, tableType) {
+        try {
+            const db = await import('../../database/connection.js');
+            const result = await db.default.query(
+                'SELECT COUNT(*) as count FROM reservation WHERE restaurant_id = $1 AND table_type = $2 AND reservation_date = $3',
+                [restaurantId, tableType, date]
+            );
+            return parseInt(result[0]?.count || 0);
+        } catch (error) {
+            console.error('❌ Error getting reservation count:', error);
+            return 0;
+        }
+    }
+
     buildSystemPrompt(reservationData) {
         const { restaurant, tableTypes, fullyBookedDates, semanticTables, hasSemanticMatch } = reservationData;
         
         // Get available table type names for mapping
         const availableTableNames = tableTypes.map(t => t.table_type).join(', ');
         
-        return `You are AICHMI, a friendly reservation assistant for ${restaurant.name}. Help guests make reservations efficiently and naturally.
+        const currentDate = new Date();
+        const tomorrow = new Date(currentDate);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        // Calculate next week dates
+        const nextWeekStart = new Date(currentDate);
+        nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+        const nextWeekEnd = new Date(nextWeekStart);
+        nextWeekEnd.setDate(nextWeekEnd.getDate() + 6);
+        
+        // Get all days of next week
+        const nextWeekDays = [];
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(nextWeekStart);
+            day.setDate(nextWeekStart.getDate() + i);
+            nextWeekDays.push(`${day.toDateString()} (${day.toISOString().slice(0, 10)})`);
+        }
+        
+        return `You are AICHMI, a reservation booking specialist for ${restaurant.name}. Your role is to create confirmed reservations for guests who have already checked availability or know what they want to book.
 
-CURRENT DATE: ${new Date().toISOString().slice(0, 10)} (${new Date().getFullYear()})
+DATE CONTEXT:
+- TODAY: ${currentDate.toDateString()} (${currentDate.toISOString().slice(0, 10)})
+- TOMORROW: ${tomorrow.toDateString()} (${tomorrow.toISOString().slice(0, 10)})
+- NEXT WEEK DATES: ${nextWeekStart.toDateString()} to ${nextWeekEnd.toDateString()}
+- Next Week Days Available:
+  ${nextWeekDays.map((day, i) => `  ${i === 0 ? 'Monday' : i === 1 ? 'Tuesday' : i === 2 ? 'Wednesday' : i === 3 ? 'Thursday' : i === 4 ? 'Friday' : i === 5 ? 'Saturday' : 'Sunday'}: ${day}`).join('\n  ')}
+- Current Year: ${currentDate.getFullYear()}
 
 PERSONALITY:
-- Be warm but concise
+- Be efficient and focused on completing reservations
 - Collect information systematically without repetitive confirmations
 - Only ask for final confirmation ONCE when you have ALL required details
+- Assume guests have already checked availability unless they specifically ask about it
 
 AVAILABLE TABLE TYPES & PRICING:
 ${tableTypes.map(table => `- ${table.table_type}: €${table.table_price || 0}`).join('\n')}
@@ -235,17 +336,32 @@ IMPORTANT TABLE TYPE MAPPING:
 - ONLY use table types that exist in the list above
 - If user request doesn't match exactly, choose the closest available type
 
-${fullyBookedDates.length > 0 ? `UNAVAILABLE: ${fullyBookedDates.map(d => d.date).join(', ')}` : ''}
+${fullyBookedDates.length > 0 ? `UNAVAILABLE DATES: ${fullyBookedDates.map(d => d.date).join(', ')}` : ''}
 
 ${hasSemanticMatch ? `RECOMMENDED TABLES:
 ${semanticTables.slice(0,3).map(table => `- ${table.table_type}: €${table.table_price}`).join('\n')}` : ''}
 
+RESERVATION BOOKING PROTOCOL:
+1. **AVAILABILITY CHECK FIRST**: When users make direct booking requests with specific date/time/party size, IMMEDIATELY check availability
+2. If available, proceed to collect any missing details (table preference, contact info)
+3. If NOT available, provide specific unavailability information and suggest alternatives
+4. Collect contact details (name, email, phone) only AFTER confirming availability
+5. Provide final summary and ask for confirmation
+6. Create the reservation upon confirmation
+
 RESERVATION FLOW:
-1. Collect date and party size first
-2. Ask about table preferences using ONLY the available table types listed above
-3. When they choose a table, ask for contact details (name, email, phone)
-4. After getting ALL details, give ONE final summary and ask for confirmation
-5. CRITICAL: When they confirm with "yes", "correct", "ok", or similar, you MUST immediately generate the reservation data below. Do not say "I have finalized the reservation" without actually generating the data block. Never claim to have created a reservation without outputting the JSON block below.
+1. **Direct booking requests**: When user says "I want to book/reserve..." with date/time/party size → CHECK AVAILABILITY FIRST
+2. If coming from availability agent handoff, first confirm if they want to proceed with booking before collecting details
+3. If starting fresh, collect: date, time, party size, then CHECK AVAILABILITY before proceeding
+4. Only after confirming availability AND booking intent, collect: table preference and contact details (name, email, phone)
+5. After getting ALL details, give ONE final summary and ask for confirmation
+6. CRITICAL: When they confirm with "yes", "correct", "ok", or similar, you MUST immediately generate the reservation data below. Do not say "I have finalized the reservation" without actually generating the data block. Never claim to have created a reservation without outputting the JSON block below.
+
+AVAILABILITY CHECKING:
+- When checking availability, the system will provide table availability information in your context
+- If unavailable, provide specific information (e.g., "We have 5 out of 5 standard tables already reserved for that date")
+- Suggest alternative dates or table types when unavailable
+- Never proceed with contact collection if the requested slot is unavailable
 
 MANDATORY: After confirmation, output this exact format:
 
@@ -298,11 +414,22 @@ CRITICAL RULE: You MUST generate this data block immediately after confirmation.
         return availableTypes.length > 0 ? availableTypes[0].table_type : 'standard';
     }
 
-    buildPrompt(message, conversationHistory, reservationData) {
+    buildPrompt(message, conversationHistory, reservationData, availabilityResult = null) {
         let prompt = '';
         
         if (conversationHistory) {
             prompt += `Previous conversation:\n${conversationHistory}\n\n`;
+        }
+        
+        // Include availability check results if available
+        if (availabilityResult) {
+            prompt += `AVAILABILITY CHECK RESULT:\n`;
+            if (availabilityResult.available) {
+                prompt += `✅ AVAILABLE: ${availabilityResult.message}\n\n`;
+            } else {
+                prompt += `❌ NOT AVAILABLE: ${availabilityResult.message}\n`;
+                prompt += `You must inform the guest about unavailability and suggest alternatives. Do not proceed with contact collection.\n\n`;
+            }
         }
         
         // Analyze what information we have from the conversation
@@ -388,6 +515,61 @@ Please help the guest with their reservation for ${reservationData.restaurant.na
         
         const msg = message.toLowerCase();
         return menuKeywords.some(keyword => msg.includes(keyword));
+    }
+
+    /**
+     * Check if this is a direct booking request that needs availability checking
+     */
+    isDirectBookingRequest(message, history) {
+        const directBookingKeywords = [
+            'i want to book', 'i want to reserve', 'i\'d like to book', 'i\'d like to reserve',
+            'can you book', 'can you reserve', 'book a table', 'reserve a table',
+            'make a reservation', 'book me a', 'reserve me a'
+        ];
+        
+        const msg = message.toLowerCase();
+        const hasBookingKeyword = directBookingKeywords.some(keyword => msg.includes(keyword));
+        
+        // Also check if message contains date/time information
+        const hasDateTimeInfo = /tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+pm|\d+am|\d+:\d+/.test(msg);
+        
+        // Check if we're not coming from availability agent (no handoff context)
+        const isFromAvailabilityAgent = history.some(h => 
+            h.text && h.text.includes('Would you like to proceed with making a reservation'));
+        
+        return hasBookingKeyword && hasDateTimeInfo && !isFromAvailabilityAgent;
+    }
+
+    /**
+     * Extract booking details from message and history
+     */
+    extractBookingDetails(message, history) {
+        const msg = message.toLowerCase();
+        const fullText = (history.map(h => h.text || '').join(' ') + ' ' + message).toLowerCase();
+        
+        const details = {};
+        
+        // Extract date
+        if (msg.includes('tomorrow')) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            details.date = tomorrow.toISOString().slice(0, 10);
+        } else if (msg.includes('today')) {
+            details.date = new Date().toISOString().slice(0, 10);
+        }
+        
+        // Extract party size
+        const partySizeMatch = fullText.match(/(\d+)\s*(people|person|guests?|party)/);
+        if (partySizeMatch) {
+            details.partySize = parseInt(partySizeMatch[1]);
+        }
+        
+        // Extract table type
+        if (msg.includes('anniversary')) details.tableType = 'anniversary';
+        else if (msg.includes('grass')) details.tableType = 'grass';
+        else if (msg.includes('standard')) details.tableType = 'standard';
+        
+        return details;
     }
 }
 

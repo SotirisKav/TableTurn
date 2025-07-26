@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
+import '../styles/Confirmation.css';
 
 function Confirmation() {
   const { state } = useLocation();

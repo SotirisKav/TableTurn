@@ -115,6 +115,7 @@ CREATE TABLE tables (
     table_id SERIAL PRIMARY KEY,
     table_type TEXT,
     table_price NUMERIC(5,2) DEFAULT 0 CHECK (table_price >= 0),
+    capacity INT NOT NULL DEFAULT 4 CHECK (capacity > 0),
     description TEXT,
     embedding vector(768),
     restaurant_id INT NOT NULL,

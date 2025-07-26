@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import '../styles/Dashboard.css';
 
 function AdminDashboardSelector() {
     const navigate = useNavigate();
@@ -81,6 +82,15 @@ function AdminDashboardSelector() {
                 {userInfo && (
                     <div className="admin-info">
                         <span className="admin-badge">Admin View</span>
+                        <button 
+                            onClick={() => {
+                                localStorage.removeItem('accessToken');
+                                navigate('/');
+                            }}
+                            className="logout-btn"
+                        >
+                            Logout
+                        </button>
                     </div>
                 )}
             </div>
