@@ -17,6 +17,8 @@
 @import './styles/PageTransition.css';
 @import './styles/Reservation.css';
 @import './styles/Subscriptions.css';
+@import './styles/RestaurantSettings.css';
+@import './styles/TableMap.css';
 
 /* Global Layout */
 .app {

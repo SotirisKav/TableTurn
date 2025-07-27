@@ -12,6 +12,7 @@ import locationRoutes from './routes/location.js';
 import multiAgentTestRouter from './routes/multiAgentTest.js';
 import multiAgentWorkflowRouter from './routes/multiAgentWorkflow.js';
 import dashboardRouter from './routes/dashboard.js';
+import restaurantRouter from './routes/restaurants.js';
 
 dotenv.config();
 
@@ -64,23 +65,8 @@ app.get('/api/restaurants', async (req, res) => {
   }
 });
 
-app.get('/api/restaurants/:id', async (req, res) => {
-  try {
-    console.log('Fetching restaurant with ID:', req.params.id);
-    const restaurant = await RestaurantService.getRestaurantById(req.params.id);
-    if (restaurant) {
-      res.json(restaurant);
-    } else {
-      res.status(404).json({ error: 'Restaurant not found' });
-    }
-  } catch (error) {
-    console.error('Error fetching restaurant:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch restaurant',
-      details: error.message 
-    });
-  }
-});
+// Authenticated Restaurant Routes
+app.use('/api/restaurants', restaurantRouter);
 
 // Authentication Routes
 app.use('/api/auth', authRouter);

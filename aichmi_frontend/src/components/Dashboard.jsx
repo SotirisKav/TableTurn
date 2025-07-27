@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import RestaurantSettings from './RestaurantSettings';
+import TableMap from './TableMap';
 import '../styles/Dashboard.css';
 
 function Dashboard() {
@@ -11,6 +13,7 @@ function Dashboard() {
     const [dashboardData, setDashboardData] = useState(null);
     const [userInfo, setUserInfo] = useState(null);
     const [restaurantInfo, setRestaurantInfo] = useState(null);
+    const [showSettings, setShowSettings] = useState(false);
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('accessToken');
@@ -240,10 +243,6 @@ function Dashboard() {
                             <div className="status-card reserved">
                                 <div className="status-number">{liveStatus?.tableStatus?.reserved || 0}</div>
                                 <div className="status-label">Reserved</div>
-                            </div>
-                            <div className="status-card cleaning">
-                                <div className="status-number">{liveStatus?.tableStatus?.cleaning || 0}</div>
-                                <div className="status-label">Cleaning</div>
                             </div>
                         </div>
 
@@ -509,6 +508,12 @@ function Dashboard() {
                 {userInfo && (
                     <div className="dashboard-user-info">
                         {userInfo.role === 'admin' && <span className="admin-badge">Admin View</span>}
+                        <button 
+                            onClick={() => setShowSettings(true)} 
+                            className="settings-btn"
+                        >
+                            ⚙️ Settings
+                        </button>
                         {userInfo.role === 'admin' && (
                             <button 
                                 onClick={() => navigate('/dashboard')} 
@@ -546,6 +551,12 @@ function Dashboard() {
                 >
                     AI Performance
                 </button>
+                <button 
+                    className={activeTab === 'table-map' ? 'active' : ''} 
+                    onClick={() => setActiveTab('table-map')}
+                >
+                    Table Map
+                </button>
             </div>
 
             <div className="dashboard-content">
@@ -553,7 +564,15 @@ function Dashboard() {
                 {activeTab === 'tier2' && renderTier2Dashboard()}
                 {activeTab === 'tier3' && renderTier3Dashboard()}
                 {activeTab === 'tier4' && renderTier4Dashboard()}
+                {activeTab === 'table-map' && <TableMap restaurantId={restaurantId} />}
             </div>
+
+            {showSettings && (
+                <RestaurantSettings 
+                    restaurantId={restaurantId} 
+                    onClose={() => setShowSettings(false)} 
+                />
+            )}
         </div>
     );
 }

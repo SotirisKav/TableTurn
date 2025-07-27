@@ -336,7 +336,7 @@ function ChatWithAichmi() {
 
     useEffect(() => {
         if (restaurantId && restaurantId !== 'undefined' && restaurantId !== 'null') {
-            fetch(`/api/restaurants/${restaurantId}`)
+            fetch(`/api/restaurants/${restaurantId}/info`)
                 .then(res => res.json())
                 .then(data => setRestaurantName(data.name || restaurantId))
                 .catch(() => setRestaurantName(restaurantId));
@@ -389,6 +389,7 @@ function ChatWithAichmi() {
             const responseText = String(data.response || data.text || 'Sorry, I received an empty response.');
             console.log('Final response text to display:', responseText);
             console.log('Response text length:', responseText.length);
+            console.log('Response type from backend:', data.type);
             
             if (!responseText || responseText.trim().length === 0) {
                 console.error('Empty response received from backend');
@@ -396,7 +397,31 @@ function ChatWithAichmi() {
                 return;
             }
             
-            // Add AI message to chat
+            // Handle two-message format
+            if (data.type === 'two_messages' && responseText.includes('|||SPLIT|||')) {
+                console.log('🎭 Processing two-message format');
+                const [firstMessage, secondMessage] = responseText.split('|||SPLIT|||');
+                
+                // Add first message immediately
+                setMessages(msgs => [...msgs, { 
+                    sender: 'ai', 
+                    text: firstMessage.trim(), 
+                    timestamp: new Date() 
+                }]);
+                
+                // Add second message after a short delay to simulate real-time checking
+                setTimeout(() => {
+                    setMessages(msgs => [...msgs, { 
+                        sender: 'ai', 
+                        text: secondMessage.trim(), 
+                        timestamp: new Date() 
+                    }]);
+                }, 1500); // 1.5 second delay
+                
+                return;
+            }
+            
+            // Regular single message handling
             console.log('Adding message to chat with text:', responseText);
             console.log('Message text length:', responseText.length);
             console.log('Message text type:', typeof responseText);

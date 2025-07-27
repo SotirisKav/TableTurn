@@ -24,14 +24,14 @@ ALTER SEQUENCE owners_id_seq RESTART WITH 1;
 -- 1. RESTAURANTS
 -- =====================================
 
-INSERT INTO restaurant (name, address, email, phone, area, island, profile_image_url, background_image_url, description, cuisine) VALUES
-('Lofaki Restaurant', 'Agios Nektarios, 85300 Kos', 'info@lofaki.gr', '+30-22420-12345', 'Kos Harbor', 'Kos', 'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1b/ee/e9/0c/dining-under-the-best.jpg', 'https://example.com/lofaki-bg.jpg', 'Authentic Greek cuisine with fresh seafood and traditional recipes passed down through generations. Located in the beautiful Kos Harbor with stunning sea views.', 'Greek & Modern Cuisine'),
+INSERT INTO restaurant (name, address, email, phone, area, island, profile_image_url, background_image_url, description, cuisine, min_reservation_gap_hours) VALUES
+('Lofaki Restaurant', 'Agios Nektarios, 85300 Kos', 'info@lofaki.gr', '+30-22420-12345', 'Kos Harbor', 'Kos', 'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1b/ee/e9/0c/dining-under-the-best.jpg', 'https://example.com/lofaki-bg.jpg', 'Authentic Greek cuisine with fresh seafood and traditional recipes passed down through generations. Located in the beautiful Kos Harbor with stunning sea views.', 'Greek & Modern Cuisine', 3),
 
-('Mykonos Paradise Restaurant', 'Paradise Beach, 84600 Mykonos', 'info@paradiserestaurant.gr', '+30-22890-23456', 'Paradise Beach', 'Mykonos', 'https://example.com/mykonos-paradise.jpg', 'https://example.com/mykonos-bg.jpg', 'Beachfront dining with spectacular sunset views and fresh Mediterranean cuisine. Perfect for romantic dinners and special celebrations.', 'Mediterranean'),
+('Mykonos Paradise Restaurant', 'Paradise Beach, 84600 Mykonos', 'info@paradiserestaurant.gr', '+30-22890-23456', 'Paradise Beach', 'Mykonos', 'https://example.com/mykonos-paradise.jpg', 'https://example.com/mykonos-bg.jpg', 'Beachfront dining with spectacular sunset views and fresh Mediterranean cuisine. Perfect for romantic dinners and special celebrations.', 'Mediterranean', 2),
 
-('Santorini Sunset Taverna', 'Oia Village, 84702 Santorini', 'info@sunsetaverna.gr', '+30-22860-34567', 'Oia', 'Santorini', 'https://example.com/santorini-sunset.jpg', 'https://example.com/santorini-bg.jpg', 'Traditional Greek taverna with breathtaking caldera views and authentic local dishes. Family-owned for three generations.', 'Traditional Greek'),
+('Santorini Sunset Taverna', 'Oia Village, 84702 Santorini', 'info@sunsetaverna.gr', '+30-22860-34567', 'Oia', 'Santorini', 'https://example.com/santorini-sunset.jpg', 'https://example.com/santorini-bg.jpg', 'Traditional Greek taverna with breathtaking caldera views and authentic local dishes. Family-owned for three generations.', 'Traditional Greek', 4),
 
-('Rhodes Castle View', 'Old Town, 85100 Rhodes', 'info@castleview.gr', '+30-22410-45678', 'Old Town', 'Rhodes', 'https://example.com/rhodes-castle.jpg', 'https://example.com/rhodes-bg.jpg', 'Historic restaurant in the medieval old town with castle views and traditional cuisine. Featuring local Rhodes specialties.', 'Greek Traditional');
+('Rhodes Castle View', 'Old Town, 85100 Rhodes', 'info@castleview.gr', '+30-22410-45678', 'Old Town', 'Rhodes', 'https://example.com/rhodes-castle.jpg', 'https://example.com/rhodes-bg.jpg', 'Historic restaurant in the medieval old town with castle views and traditional cuisine. Featuring local Rhodes specialties.', 'Greek Traditional', 2);
 
 -- =====================================
 -- 2. RESTAURANT HOURS
@@ -139,31 +139,46 @@ INSERT INTO transfer_prices (price_4_or_less, price_5_to_8, hotel_id, restaurant
 -- 6. TABLES
 -- =====================================
 
-INSERT INTO tables (table_type, table_price, capacity, restaurant_id) VALUES
+INSERT INTO tables (table_name, table_type, table_price, capacity, restaurant_id, x_coordinate, y_coordinate, status) VALUES
 -- Lofaki Restaurant (13 standard, 10 grass, 2 anniversary)
-('standard', 0.00, 4, 1), ('standard', 0.00, 2, 1), ('standard', 0.00, 6, 1), ('standard', 0.00, 4, 1), ('standard', 0.00, 4, 1),
-('standard', 0.00, 2, 1), ('standard', 0.00, 4, 1), ('standard', 0.00, 8, 1), ('standard', 0.00, 6, 1), ('standard', 0.00, 4, 1),
-('standard', 0.00, 2, 1), ('standard', 0.00, 4, 1), ('standard', 0.00, 6, 1),
-('grass', 15.00, 4, 1), ('grass', 15.00, 6, 1), ('grass', 15.00, 4, 1), ('grass', 15.00, 8, 1), ('grass', 15.00, 4, 1),
-('grass', 15.00, 6, 1), ('grass', 15.00, 4, 1), ('grass', 15.00, 2, 1), ('grass', 15.00, 4, 1), ('grass', 15.00, 6, 1),
-('anniversary', 80.00, 8, 1), ('anniversary', 80.00, 10, 1),
+-- Standard tables (A section) - positioned in a grid-like layout
+('A1', 'standard', 0.00, 4, 1, 50, 50, 'available'), ('A2', 'standard', 0.00, 2, 1, 200, 50, 'available'), ('A3', 'standard', 0.00, 6, 1, 350, 50, 'available'), 
+('A4', 'standard', 0.00, 4, 1, 500, 50, 'available'), ('A5', 'standard', 0.00, 4, 1, 50, 150, 'available'),
+('A6', 'standard', 0.00, 2, 1, 200, 150, 'available'), ('A7', 'standard', 0.00, 4, 1, 350, 150, 'available'), ('A8', 'standard', 0.00, 8, 1, 500, 150, 'available'), 
+('A9', 'standard', 0.00, 6, 1, 50, 250, 'available'), ('A10', 'standard', 0.00, 4, 1, 200, 250, 'available'),
+('A11', 'standard', 0.00, 2, 1, 350, 250, 'available'), ('A12', 'standard', 0.00, 4, 1, 500, 250, 'available'), ('A13', 'standard', 0.00, 6, 1, 300, 350, 'available'),
+-- Grass tables (B section) - positioned with more spacing
+('B1', 'grass', 15.00, 4, 1, 100, 400, 'available'), ('B2', 'grass', 15.00, 6, 1, 300, 400, 'available'), ('B3', 'grass', 15.00, 4, 1, 500, 400, 'available'), 
+('B4', 'grass', 15.00, 8, 1, 100, 520, 'available'), ('B5', 'grass', 15.00, 4, 1, 300, 520, 'available'),
+('B6', 'grass', 15.00, 6, 1, 500, 520, 'available'), ('B7', 'grass', 15.00, 4, 1, 200, 640, 'available'), ('B8', 'grass', 15.00, 2, 1, 400, 640, 'available'), 
+('B9', 'grass', 15.00, 4, 1, 150, 760, 'available'), ('B10', 'grass', 15.00, 6, 1, 350, 760, 'available'),
+-- Anniversary tables (C section) - premium positioning
+('C1', 'anniversary', 80.00, 8, 1, 200, 880, 'available'), ('C2', 'anniversary', 80.00, 10, 1, 400, 880, 'available'),
 
 -- Mykonos Paradise Restaurant (8 standard, 6 grass, 4 anniversary)
-('standard', 10.00, 4, 2), ('standard', 10.00, 6, 2), ('standard', 10.00, 4, 2), ('standard', 10.00, 2, 2),
-('standard', 10.00, 4, 2), ('standard', 10.00, 8, 2), ('standard', 10.00, 6, 2), ('standard', 10.00, 4, 2),
-('grass', 25.00, 6, 2), ('grass', 25.00, 4, 2), ('grass', 25.00, 8, 2), ('grass', 25.00, 6, 2), ('grass', 25.00, 4, 2), ('grass', 25.00, 6, 2),
-('anniversary', 100.00, 8, 2), ('anniversary', 100.00, 10, 2), ('anniversary', 100.00, 12, 2), ('anniversary', 100.00, 8, 2),
+-- Standard tables (A section)
+('A1', 'standard', 10.00, 4, 2, 60, 60, 'available'), ('A2', 'standard', 10.00, 6, 2, 220, 60, 'available'), ('A3', 'standard', 10.00, 4, 2, 380, 60, 'available'), ('A4', 'standard', 10.00, 2, 2, 540, 60, 'available'),
+('A5', 'standard', 10.00, 4, 2, 60, 180, 'available'), ('A6', 'standard', 10.00, 8, 2, 220, 180, 'available'), ('A7', 'standard', 10.00, 6, 2, 380, 180, 'available'), ('A8', 'standard', 10.00, 4, 2, 540, 180, 'available'),
+-- Grass tables (B section)
+('B1', 'grass', 25.00, 6, 2, 80, 320, 'available'), ('B2', 'grass', 25.00, 4, 2, 280, 320, 'available'), ('B3', 'grass', 25.00, 8, 2, 480, 320, 'available'), ('B4', 'grass', 25.00, 6, 2, 80, 460, 'available'), ('B5', 'grass', 25.00, 4, 2, 280, 460, 'available'), ('B6', 'grass', 25.00, 6, 2, 480, 460, 'available'),
+-- Anniversary tables (C section)
+('C1', 'anniversary', 100.00, 8, 2, 120, 600, 'available'), ('C2', 'anniversary', 100.00, 10, 2, 320, 600, 'available'), ('C3', 'anniversary', 100.00, 12, 2, 520, 600, 'available'), ('C4', 'anniversary', 100.00, 8, 2, 320, 720, 'available'),
 
 -- Santorini Sunset Taverna (10 standard, 6 anniversary)
-('standard', 15.00, 4, 3), ('standard', 15.00, 2, 3), ('standard', 15.00, 6, 3), ('standard', 15.00, 4, 3), ('standard', 15.00, 4, 3),
-('standard', 15.00, 6, 3), ('standard', 15.00, 2, 3), ('standard', 15.00, 4, 3), ('standard', 15.00, 8, 3), ('standard', 15.00, 4, 3),
-('anniversary', 120.00, 8, 3), ('anniversary', 120.00, 10, 3), ('anniversary', 120.00, 6, 3), ('anniversary', 120.00, 8, 3), ('anniversary', 120.00, 12, 3), ('anniversary', 120.00, 10, 3),
+-- Standard tables (A section)
+('A1', 'standard', 15.00, 4, 3, 70, 70, 'available'), ('A2', 'standard', 15.00, 2, 3, 250, 70, 'available'), ('A3', 'standard', 15.00, 6, 3, 430, 70, 'available'), ('A4', 'standard', 15.00, 4, 3, 70, 200, 'available'), ('A5', 'standard', 15.00, 4, 3, 250, 200, 'available'),
+('A6', 'standard', 15.00, 6, 3, 430, 200, 'available'), ('A7', 'standard', 15.00, 2, 3, 70, 330, 'available'), ('A8', 'standard', 15.00, 4, 3, 250, 330, 'available'), ('A9', 'standard', 15.00, 8, 3, 430, 330, 'available'), ('A10', 'standard', 15.00, 4, 3, 250, 460, 'available'),
+-- Anniversary tables (C section)
+('C1', 'anniversary', 120.00, 8, 3, 100, 590, 'available'), ('C2', 'anniversary', 120.00, 10, 3, 350, 590, 'available'), ('C3', 'anniversary', 120.00, 6, 3, 100, 720, 'available'), ('C4', 'anniversary', 120.00, 8, 3, 350, 720, 'available'), ('C5', 'anniversary', 120.00, 12, 3, 225, 850, 'available'), ('C6', 'anniversary', 120.00, 10, 3, 450, 850, 'available'),
 
 -- Rhodes Castle View (12 standard, 4 grass, 2 anniversary)
-('standard', 5.00, 4, 4), ('standard', 5.00, 2, 4), ('standard', 5.00, 6, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 6, 4),
-('standard', 5.00, 2, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 8, 4), ('standard', 5.00, 4, 4), ('standard', 5.00, 6, 4), ('standard', 5.00, 4, 4),
-('grass', 12.00, 6, 4), ('grass', 12.00, 4, 4), ('grass', 12.00, 8, 4), ('grass', 12.00, 6, 4),
-('anniversary', 50.00, 8, 4), ('anniversary', 50.00, 10, 4);
+-- Standard tables (A section)
+('A1', 'standard', 5.00, 4, 4, 80, 80, 'available'), ('A2', 'standard', 5.00, 2, 4, 240, 80, 'available'), ('A3', 'standard', 5.00, 6, 4, 400, 80, 'available'), ('A4', 'standard', 5.00, 4, 4, 560, 80, 'available'), ('A5', 'standard', 5.00, 4, 4, 80, 220, 'available'), ('A6', 'standard', 5.00, 6, 4, 240, 220, 'available'),
+('A7', 'standard', 5.00, 2, 4, 400, 220, 'available'), ('A8', 'standard', 5.00, 4, 4, 560, 220, 'available'), ('A9', 'standard', 5.00, 8, 4, 80, 360, 'available'), ('A10', 'standard', 5.00, 4, 4, 240, 360, 'available'), ('A11', 'standard', 5.00, 6, 4, 400, 360, 'available'), ('A12', 'standard', 5.00, 4, 4, 560, 360, 'available'),
+-- Grass tables (B section)
+('B1', 'grass', 12.00, 6, 4, 120, 500, 'available'), ('B2', 'grass', 12.00, 4, 4, 320, 500, 'available'), ('B3', 'grass', 12.00, 8, 4, 520, 500, 'available'), ('B4', 'grass', 12.00, 6, 4, 220, 620, 'available'),
+-- Anniversary tables (C section)
+('C1', 'anniversary', 50.00, 8, 4, 180, 740, 'available'), ('C2', 'anniversary', 50.00, 10, 4, 420, 740, 'available');
 
 -- =====================================
 -- 7. MENU ITEMS

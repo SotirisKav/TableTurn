@@ -38,13 +38,25 @@ router.get('/tier1/:restaurantId', checkDashboardAccess, async (req, res) => {
             ORDER BY reservation_time
         `, [restaurantId, today]);
 
-        // Current table status (mock data for now since tables table may not exist)
-        const tableStatus = [{
-            total_tables: 20,
-            available_tables: 8,
-            occupied_tables: 10,
-            reserved_tables: 2,
-            cleaning_tables: 0
+        // Clean up expired reservations first
+        await db.execute('SELECT cleanup_expired_reservations()');
+        
+        // Get real table status for this restaurant
+        const [tableStatusQuery] = await db.execute(`
+            SELECT 
+                COUNT(*) as total_tables,
+                COUNT(CASE WHEN get_current_table_status(table_id, restaurant_id) = 'available' THEN 1 END) as available_tables,
+                COUNT(CASE WHEN get_current_table_status(table_id, restaurant_id) = 'occupied' THEN 1 END) as occupied_tables,
+                COUNT(CASE WHEN get_current_table_status(table_id, restaurant_id) = 'reserved' THEN 1 END) as reserved_tables
+            FROM tables
+            WHERE restaurant_id = $1
+        `, [restaurantId]);
+        
+        const tableStatus = tableStatusQuery.length > 0 ? tableStatusQuery : [{
+            total_tables: 0,
+            available_tables: 0,
+            occupied_tables: 0,
+            reserved_tables: 0
         }];
 
         // Today's sales performance
@@ -179,8 +191,7 @@ router.get('/tier1/:restaurantId', checkDashboardAccess, async (req, res) => {
                     total: tableStatus[0]?.total_tables || 0,
                     available: tableStatus[0]?.available_tables || 0,
                     occupied: tableStatus[0]?.occupied_tables || 0,
-                    reserved: tableStatus[0]?.reserved_tables || 0,
-                    cleaning: tableStatus[0]?.cleaning_tables || 0
+                    reserved: tableStatus[0]?.reserved_tables || 0
                 },
                 todayMetrics: {
                     reservations: salesData[0]?.total_reservations || 0,
@@ -371,8 +382,86 @@ router.get('/tier4/:restaurantId', checkDashboardAccess, async (req, res) => {
     }
 });
 
+// NEW ENDPOINT: Get table map data for a restaurant
+router.get('/table-map/:restaurantId', checkDashboardAccess, async (req, res) => {
+    try {
+        const restaurantId = parseInt(req.params.restaurantId);
+
+        // Clean up expired reservations first
+        await db.execute('SELECT cleanup_expired_reservations()');
+        
+        // Fetch all tables for the given restaurant with real-time status
+        const [tables] = await db.execute(`
+            SELECT 
+                table_id,
+                restaurant_id,
+                table_name as table_number,
+                capacity,
+                x_coordinate,
+                y_coordinate,
+                get_current_table_status(table_id, restaurant_id) as status
+            FROM tables
+            WHERE restaurant_id = $1
+            ORDER BY table_name
+        `, [restaurantId]);
+
+        res.json({ tables });
+
+    } catch (error) {
+        console.error('Table map data fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch table map data' });
+    }
+});
+
+// NEW ENDPOINT: Update table position (for drag-and-drop)
+router.put('/tables/:tableId/position', authenticateToken, async (req, res) => {
+    try {
+        const tableId = parseInt(req.params.tableId);
+        const { x, y } = req.body;
+
+        if (typeof x === 'undefined' || typeof y === 'undefined') {
+            return res.status(400).json({ error: 'Missing x or y coordinates' });
+        }
+
+        // First, verify the user's access and that the table belongs to their restaurant
+        const [tableInfo] = await db.execute(`
+            SELECT restaurant_id FROM tables WHERE table_id = $1
+        `, [tableId]);
+
+        if (tableInfo.length === 0) {
+            return res.status(404).json({ error: 'Table not found' });
+        }
+
+        const tableRestaurantId = tableInfo[0].restaurant_id;
+
+        // Now, apply your dashboard access logic.
+        // Assuming req.user.restaurantId is set by authenticateToken and checkDashboardAccess
+        // and req.user.role is also set (e.g., 'admin' or 'owner')
+        const userRestaurantId = req.user.restaurantId;
+        const userRole = req.user.role; // Assuming role is available on req.user
+
+        // Authorization check: Only admin or the specific restaurant owner can move tables
+        if (userRole !== 'admin' && (userRestaurantId !== tableRestaurantId || userRole !== 'owner')) {
+            return res.status(403).json({ error: 'Access denied. You can only modify tables for your own restaurant.' });
+        }
+        
+        // Update the table's coordinates
+        await db.execute(`
+            UPDATE tables
+            SET x_coordinate = $1, y_coordinate = $2
+            WHERE table_id = $3
+        `, [x, y, tableId]);
+
+        res.status(200).json({ message: 'Table position updated successfully' });
+
+    } catch (error) {
+        console.error('Error updating table position:', error);
+        res.status(500).json({ error: 'Failed to update table position' });
+    }
+});
+
 // Get user info for dashboard header
-router.get('/user-info', async (req, res) => {
+router.get('/user-info', authenticateToken, async (req, res) => {
     try {
         const [owners] = await db.execute(
             'SELECT restaurant_id, email FROM owners WHERE id = $1',

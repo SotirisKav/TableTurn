@@ -53,7 +53,7 @@ class RestaurantInfoAgent extends BaseAgent {
                     ...this.suggestHandoff('reservation', message, {
                         restaurant: restaurantData,
                         userInterest: 'booking'
-                    }, restaurantId)
+                    }, restaurantId, history)
                 };
             }
             

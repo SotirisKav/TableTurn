@@ -291,6 +291,7 @@
 .message-content {
   padding: 1rem 1.25rem 0.5rem 1.25rem;
   line-height: 1.5;
+  white-space: pre-wrap; /* Preserve newlines and whitespace */
 }
 
 .message-timestamp {

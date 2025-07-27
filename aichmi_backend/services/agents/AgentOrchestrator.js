@@ -92,7 +92,7 @@ class AgentOrchestrator {
         );
         
         // Post-process response and handle agent coordination
-        return await this.coordinateResponse(response, intent, agent, restaurantId);
+        return await this.coordinateResponse(response, intent, agent, restaurantId, history);
     }
 
     /**
@@ -178,112 +178,79 @@ class AgentOrchestrator {
     }
 
     /**
-     * Analyze user intent using keyword matching and context
+     * Analyze user intent using AI logic instead of keywords
      */
     async analyzeIntent(message, history) {
-        const msg = message.toLowerCase();
-        
-        // High priority availability keywords that should immediately route to availability agent
-        const highPriorityAvailabilityKeywords = ['biggest', 'largest', 'capacity', 'maximum', 'what tables'];
-        const hasHighPriorityAvailability = highPriorityAvailabilityKeywords.some(keyword => msg.includes(keyword));
-        
-        if (hasHighPriorityAvailability) {
-            console.log('🎯 High priority availability keyword detected, routing to availability agent');
-            return 'availability';
-        }
-        
-        // Check recent conversation context for ongoing reservation
-        const conversationContext = this.getRecentContext(history);
-        const isReservationFlow = conversationContext.includes('booking') || 
-                                 conversationContext.includes('book it') || 
-                                 conversationContext.includes('make reservation') ||
-                                 conversationContext.includes('proceed with') ||
-                                 conversationContext.includes('finalize') ||
-                                 conversationContext.includes('party size') ||
-                                 this.conversationState.context.bookingInProgress;
-        
-        // If we're in a reservation flow, prioritize reservation intent
-        if (isReservationFlow) {
-            // Check for confirmation responses and reservation-related keywords
-            const confirmationKeywords = ['yes', 'correct', 'ok', 'okay', 'sure', 'confirm', 'book it', 'go ahead', 'that works'];
-            const reservationKeywords = ['book', 'reserve', 'booking', 'make reservation', 'standard', 'grass', 'anniversary', 'fee', 'price', 'euros', 'confirm', '@', 'email', 'phone', 'name'];
+        try {
+            // Get recent conversation context
+            const recentContext = this.getRecentContext(history);
             
-            const hasConfirmation = confirmationKeywords.some(keyword => msg.includes(keyword));
-            const hasReservationKeyword = reservationKeywords.some(keyword => msg.includes(keyword));
+            // Check if we're in an ongoing reservation flow
+            const isReservationFlow = this.conversationState.context.bookingInProgress;
             
-            // In reservation flow, also treat simple numeric responses, table types, and common responses as reservation intent
-            const isNumericResponse = /^\d+$/.test(msg.trim());
-            const isTableType = ['standard', 'grass', 'anniversary'].includes(msg.trim());
-            const isSimpleResponse = msg.trim().length <= 15 && !msg.includes(' ');
+            // Use AI to analyze intent with context
+            const { askGemini } = await import('../AIService.js');
             
-            if (hasConfirmation || hasReservationKeyword || isNumericResponse || isTableType || isSimpleResponse || /(\\d+|august|july|september|january|february|march|april|may|june|october|november|december|\\d+\\s*(pm|am)|party|people|guests|email|phone|@)/i.test(message)) {
+            const intentPrompt = `Analyze the user's intent from this message in the context of a restaurant reservation system.
+
+Recent conversation context:
+${recentContext || 'No recent context'}
+
+Current message: "${message}"
+
+Is this part of an ongoing reservation? ${isReservationFlow ? 'Yes' : 'No'}
+
+Based on the message and context, determine the PRIMARY intent from these options:
+- reservation: Making, confirming, or continuing a booking
+- availability: Checking table availability or capacity
+- menu: Asking about food, drinks, prices, dietary options
+- celebration: Special occasions, birthdays, anniversaries, romantic dining
+- location: Address, directions, transfers, hotels
+- support: Contact info, complaints, help requests
+- restaurant: General info, hours, atmosphere, reviews
+
+Respond with just the intent name (one word).`;
+
+            const intentResponse = await askGemini(intentPrompt, [], null);
+            const detectedIntent = intentResponse.response?.toLowerCase().trim();
+            
+            // Validate the response is one of our expected intents
+            const validIntents = ['reservation', 'availability', 'menu', 'celebration', 'location', 'support', 'restaurant'];
+            
+            if (validIntents.includes(detectedIntent)) {
+                console.log(`🤖 AI detected intent: ${detectedIntent} for message: "${message}"`);
+                return detectedIntent;
+            } else {
+                // Fallback logic for edge cases
+                console.log(`🤖 AI intent analysis returned unexpected result: ${detectedIntent}, using fallback`);
+                
+                // Smart fallback based on context
+                if (isReservationFlow) {
+                    return 'reservation';
+                } else if (message.toLowerCase().includes('book') || message.toLowerCase().includes('reserve')) {
+                    return 'reservation';
+                } else if (message.toLowerCase().includes('menu') || message.toLowerCase().includes('food')) {
+                    return 'menu';
+                } else {
+                    return 'restaurant';
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Error in AI intent analysis:', error);
+            
+            // Fallback to simple logic
+            const msg = message.toLowerCase();
+            if (this.conversationState.context.bookingInProgress) {
                 return 'reservation';
+            } else if (msg.includes('book') || msg.includes('reserve')) {
+                return 'reservation';
+            } else if (msg.includes('menu') || msg.includes('food')) {
+                return 'menu';
+            } else {
+                return 'restaurant';
             }
         }
-        
-        // High priority keywords that should override general patterns
-        if (msg.includes('owner') || msg.includes('manager') || msg.includes('contact')) {
-            return 'support';
-        }
-        
-        // Intent patterns with priority order
-        const intentPatterns = {
-            availability: [
-                'available', 'availability', 'check', 'biggest', 'largest', 'capacity', 'maximum',
-                'what tables', 'table options', 'accommodate', 'fit', 'seat', 'seating', 'how many',
-                'big table', 'large table', 'size', 'what size', 'table types', 'options'
-            ],
-            reservation: [
-                'book', 'reserve', 'reservation', 'reserv', 'booking', 'resrrvation', 'make reservation',
-                'want to book', 'proceed', 'go ahead', 'confirm', 'finalize', 'yes please', 'book it',
-                'reserve it', 'let me book', 'i want to reserve'
-            ],
-            datetime: [
-                'date', 'time', 'tomorrow', 'today', 'day', 'what day', 'when', 'monday', 'tuesday', 
-                'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'next week', 'next month'
-            ],
-            menu: [
-                'menu', 'dish', 'food', 'eat', 'price', 'cost', 'order', 'meal',
-                'vegetarian', 'vegan', 'gluten', 'diet', 'cuisine', 'speciality'
-            ],
-            celebration: [
-                'birthday', 'anniversary', 'celebration', 'special', 'occasion',
-                'cake', 'flower', 'surprise', 'romantic', 'proposal'
-            ],
-            location: [
-                'location', 'address', 'transfer', 'transport', 'pickup',
-                'airport', 'hotel', 'directions', 'how to get', 'where'
-            ],
-            support: [
-                'help', 'phone', 'email', 'problem', 'issue', 'complaint', 'question'
-            ],
-            restaurant: [
-                'about', 'info', 'hours', 'open', 'close', 'atmosphere',
-                'style', 'rating', 'review', 'description'
-            ]
-        };
-
-        // Check recent conversation context
-        const recentContext = this.getRecentContext(history);
-        
-        // Score each intent based on keyword matches
-        const intentScores = {};
-        for (const [intent, keywords] of Object.entries(intentPatterns)) {
-            intentScores[intent] = keywords.reduce((score, keyword) => {
-                if (msg.includes(keyword)) {
-                    score += 1;
-                    // Boost score if keyword appears in recent context
-                    if (recentContext.includes(keyword)) score += 0.5;
-                }
-                return score;
-            }, 0);
-        }
-
-        // Return the intent with highest score, default to restaurant info
-        const topIntent = Object.entries(intentScores)
-            .sort(([,a], [,b]) => b - a)[0];
-        
-        return topIntent[1] > 0 ? topIntent[0] : 'restaurant';
     }
 
     /**
@@ -517,16 +484,18 @@ class AgentOrchestrator {
     /**
      * Coordinate response and handle agent handoffs
      */
-    async coordinateResponse(response, intent, agent, restaurantId) {
+    async coordinateResponse(response, intent, agent, restaurantId, originalHistory = []) {
         // Check if agent suggests handoff to another agent
         if (response.handoff) {
             console.log(`🔄 Agent handoff: ${agent.name} → ${response.handoff.agent}`);
             const nextAgent = this.agents[response.handoff.agent];
             if (nextAgent) {
+                // Use original history if handoff history is not provided
+                const historyToUse = response.handoff.history || originalHistory;
                 return await nextAgent.processMessage(
                     response.handoff.message,
-                    response.handoff.history || [],
-                    response.handoff.restaurantId,
+                    historyToUse,
+                    response.handoff.restaurantId || restaurantId,
                     { ...this.conversationState.context, ...response.handoff.context }
                 );
             }

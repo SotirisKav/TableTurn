@@ -56,7 +56,9 @@ class RestaurantService {
                     r.cuisine,
                     r.phone,
                     r.email as contact_email,
-                    r.profile_image_url,
+                    r.profile_image_url as image,
+                    r.background_image_url,
+                    r.min_reservation_gap_hours,
                     o.first_name,
                     o.last_name,
                     o.phone as owner_phone,
@@ -81,6 +83,7 @@ class RestaurantService {
             if (!id || id === 'null' || id === 'undefined') {
                 throw new Error(`Invalid restaurant ID: ${id}`);
             }
+            
             const query = `
                 SELECT 
                     r.restaurant_id,
@@ -91,8 +94,10 @@ class RestaurantService {
                     r.description,
                     r.cuisine,
                     r.phone,
-                    r.email as contact_email,
+                    r.email,
                     r.profile_image_url,
+                    r.background_image_url,
+                    r.min_reservation_gap_hours,
                     o.first_name,
                     o.last_name,
                     o.phone as owner_phone,
@@ -107,6 +112,81 @@ class RestaurantService {
             return result[0] || null;
         } catch (error) {
             console.error('Error fetching restaurant by ID:', error);
+            throw error;
+        }
+    }
+
+    // Update a restaurant
+    static async updateRestaurant(id, updateData) {
+        try {
+            // Check if id is valid
+            if (!id || id === 'null' || id === 'undefined') {
+                throw new Error(`Invalid restaurant ID: ${id}`);
+            }
+
+            const {
+                name,
+                address,
+                email,
+                phone,
+                area,
+                island,
+                description,
+                cuisine,
+                min_reservation_gap_hours,
+                profile_image_url,
+                background_image_url
+            } = updateData;
+
+            const query = `
+                UPDATE restaurant 
+                SET 
+                    name = $2,
+                    address = $3,
+                    email = $4,
+                    phone = $5,
+                    area = $6,
+                    island = $7,
+                    description = $8,
+                    cuisine = $9,
+                    min_reservation_gap_hours = $10,
+                    profile_image_url = $11,
+                    background_image_url = $12
+                WHERE restaurant_id = $1
+                RETURNING 
+                    restaurant_id,
+                    name,
+                    address,
+                    email,
+                    phone,
+                    area,
+                    island,
+                    description,
+                    cuisine,
+                    min_reservation_gap_hours,
+                    profile_image_url,
+                    background_image_url;
+            `;
+            
+            const values = [
+                id,
+                name,
+                address,
+                email,
+                phone,
+                area,
+                island,
+                description,
+                cuisine,
+                min_reservation_gap_hours || 2, // Default to 2 hours
+                profile_image_url,
+                background_image_url
+            ];
+
+            const result = await db.query(query, values);
+            return result[0] || null;
+        } catch (error) {
+            console.error('Error updating restaurant:', error);
             throw error;
         }
     }
@@ -230,24 +310,129 @@ class RestaurantService {
     // Get table inventory for a specific restaurant
     static async getTableInventory(restaurantId) {
         try {
-            const query = `
+            // First check if table_name column exists
+            let hasTableNameColumn = false;
+            try {
+                await db.query(`
+                    SELECT table_name 
+                    FROM tables 
+                    WHERE restaurant_id = $1 
+                    LIMIT 1
+                `, [restaurantId]);
+                hasTableNameColumn = true;
+            } catch (checkError) {
+                hasTableNameColumn = false;
+            }
+
+            const query = hasTableNameColumn ? `
                 SELECT 
+                    table_id,
+                    table_name,
                     table_type,
                     table_price,
-                    COUNT(*) as total_tables
+                    capacity,
+                    description
                 FROM tables
                 WHERE restaurant_id = $1
-                GROUP BY table_type, table_price
-                ORDER BY table_type;
+                ORDER BY table_type, table_name;
+            ` : `
+                SELECT 
+                    table_id,
+                    CASE 
+                        WHEN table_type = 'standard' THEN 'A' || ROW_NUMBER() OVER (PARTITION BY table_type ORDER BY table_id)
+                        WHEN table_type = 'grass' THEN 'B' || ROW_NUMBER() OVER (PARTITION BY table_type ORDER BY table_id)
+                        WHEN table_type = 'anniversary' THEN 'C' || ROW_NUMBER() OVER (PARTITION BY table_type ORDER BY table_id)
+                        ELSE 'T' || table_id
+                    END as table_name,
+                    table_type,
+                    table_price,
+                    capacity,
+                    description
+                FROM tables
+                WHERE restaurant_id = $1
+                ORDER BY table_type, table_id;
             `;
             
             const result = await db.query(query, [restaurantId]);
-            // db.query already returns result.rows directly, not a result object with .rows
             return result || [];
         } catch (error) {
             console.error('Error fetching table inventory:', error);
-            // Return empty array if tables don't exist
             return [];
+        }
+    }
+
+    // Get reservations for a specific restaurant on a specific date
+    static async getReservationsByDate(restaurantId, date) {
+        try {
+            const query = `
+                SELECT 
+                    r.reservation_id,
+                    r.reservation_name,
+                    r.reservation_email,
+                    r.reservation_phone,
+                    r.reservation_date,
+                    r.reservation_time,
+                    r.guests,
+                    r.table_type,
+                    r.table_id,
+                    r.celebration_type,
+                    r.cake,
+                    r.flowers,
+                    r.hotel_name,
+                    t.table_name
+                FROM reservation r
+                LEFT JOIN tables t ON r.table_id = t.table_id
+                WHERE r.restaurant_id = $1 AND r.reservation_date = $2
+                ORDER BY r.reservation_time;
+            `;
+            
+            const result = await db.query(query, [restaurantId, date]);
+            return result || [];
+        } catch (error) {
+            console.error('Error fetching reservations by date:', error);
+            return [];
+        }
+    }
+
+    // Update table name
+    static async updateTableName(tableId, newName) {
+        try {
+            // First check if table_name column exists
+            let hasTableNameColumn = false;
+            try {
+                await db.query(`
+                    SELECT table_name 
+                    FROM tables 
+                    WHERE table_id = $1 
+                    LIMIT 1
+                `, [tableId]);
+                hasTableNameColumn = true;
+            } catch (checkError) {
+                hasTableNameColumn = false;
+            }
+
+            if (!hasTableNameColumn) {
+                throw new Error('Table name editing is not available. Please update your database schema.');
+            }
+
+            const query = `
+                UPDATE tables 
+                SET table_name = $2
+                WHERE table_id = $1
+                RETURNING 
+                    table_id,
+                    table_name,
+                    table_type,
+                    table_price,
+                    capacity,
+                    description;
+            `;
+            
+            const result = await db.query(query, [tableId, newName]);
+            return result[0] || null;
+        } catch (error) {
+            console.error('Error updating table name:', error);
+            throw error;
         }
     }
 

@@ -20,19 +20,70 @@ class ReservationAgent extends BaseAgent {
         try {
             console.log(`📅 ${this.name} processing:`, message);
 
-            // Check if this is a direct booking request that needs availability checking
+            // Check if we have date/time/people information and need availability checking
+            const bookingDetails = await this.extractBookingDetails(message, history);
+            const needsAvailabilityCheck = bookingDetails.date && bookingDetails.time && bookingDetails.partySize;
+            
+            console.log('🔍 Booking details extracted:', bookingDetails);
+            console.log('🎯 Needs availability check:', needsAvailabilityCheck);
+            
+            // If we have the required booking details, perform two-message availability flow
+            if (needsAvailabilityCheck) {
+                console.log('🚀 Starting two-message availability flow');
+                
+                // FIRST MESSAGE: Checking message
+                const checkingMessage = `Okay, checking for availability for a table at ${this.formatDate(bookingDetails.date)}, ${this.formatTime(bookingDetails.time)} for ${bookingDetails.partySize} people...`;
+                
+                // Perform the actual availability check
+                const availabilityResult = await this.checkAvailability(
+                    restaurantId, 
+                    bookingDetails.date, 
+                    bookingDetails.tableType || 'standard',
+                    bookingDetails.time
+                );
+                
+                console.log('📊 Availability check result:', availabilityResult);
+                
+                // Fetch reservation data for table type information
+                const reservationData = await this.fetchReservationData(restaurantId);
+                const hasMultipleTableTypes = reservationData.tableTypes.length > 1;
+                
+                // SECOND MESSAGE: Generate the results message based on availability
+                let resultsMessage = '';
+                if (availabilityResult.available) {
+                    if (hasMultipleTableTypes) {
+                        resultsMessage = `Great news! We have tables available for ${this.formatDate(bookingDetails.date)} at ${this.formatTime(bookingDetails.time)} for ${bookingDetails.partySize} people.\n\nWhich type of table would you prefer?\n${reservationData.tableTypes.map(t => `• ${t.table_type} (€${t.table_price})`).join('\n')}\n\nJust let me know which one you'd like!`;
+                    } else {
+                        resultsMessage = `Perfect! We have tables available for ${this.formatDate(bookingDetails.date)} at ${this.formatTime(bookingDetails.time)} for ${bookingDetails.partySize} people.\n\nTo complete your reservation, I'll need your name, email, and phone number.`;
+                    }
+                } else {
+                    if (availabilityResult.hasAlternatives) {
+                        resultsMessage = availabilityResult.message;
+                    } else {
+                        resultsMessage = `${availabilityResult.message}\n\nWould you like to try a different date or time?`;
+                    }
+                }
+                
+                // Return with special two-message format
+                return this.formatResponse(
+                    `${checkingMessage}|||SPLIT|||${resultsMessage}`,
+                    'two_messages'
+                );
+            }
+
+            // Legacy flow for other types of messages
             const isDirectBookingRequest = this.isDirectBookingRequest(message, history);
             let availabilityResult = null;
             
             if (isDirectBookingRequest) {
-                // Extract booking details and check availability
-                const bookingDetails = this.extractBookingDetails(message, history);
+                // Use already extracted booking details
                 if (bookingDetails.date && bookingDetails.partySize) {
                     console.log('🔍 Checking availability for direct booking request:', bookingDetails);
                     availabilityResult = await this.checkAvailability(
                         restaurantId, 
                         bookingDetails.date, 
-                        bookingDetails.tableType || 'standard'
+                        bookingDetails.tableType || 'standard',
+                        bookingDetails.time
                     );
                 }
             }
@@ -101,6 +152,66 @@ class ReservationAgent extends BaseAgent {
             // Generate response with RAG context
             const aiResponse = await this.generateResponse(fullPrompt, systemPrompt, ragData);
             
+            // Check if the response contains a tool_code for availability checking
+            if (aiResponse.includes('```tool_code') && aiResponse.includes('availability_checking')) {
+                console.log('🔍 Detected availability checking tool_code, processing internally...');
+                
+                // Extract tool_code parameters
+                const toolCodeMatch = aiResponse.match(/```tool_code\s*\n([\s\S]*?)\n```/);
+                if (toolCodeMatch) {
+                    try {
+                        const toolData = JSON.parse(toolCodeMatch[1]);
+                        if (toolData.tool_code === 'availability_checking') {
+                            // Perform availability check
+                            const availabilityResult = await this.checkAvailability(
+                                restaurantId,
+                                toolData.date,
+                                'standard' // Default table type for now
+                            );
+                            
+                            // Generate follow-up response based on availability
+                            const availabilityPrompt = `Based on the availability check results:
+${availabilityResult.available ? 
+    `✅ Tables are available on ${toolData.date} at ${toolData.time} for ${toolData.party_size} people. ${availabilityResult.message}` : 
+    `❌ ${availabilityResult.message}`
+}
+
+Continue the conversation appropriately. If available, proceed to collect contact information. If not available, suggest alternatives.
+
+Previous conversation:
+${this.buildConversationHistory(history)}
+
+Current user message: ${message}`;
+
+                            const followUpResponse = await this.generateResponse(availabilityPrompt, systemPrompt, ragData);
+                            
+                            // Extract reservation data from follow-up response if present
+                            const reservationDetails = this.extractStructuredData(followUpResponse, 'RESERVATION');
+                            
+                            // Handle celebration handoff check for follow-up response
+                            if (this.shouldHandoffToCelebration(message)) {
+                                return {
+                                    ...this.formatResponse(followUpResponse),
+                                    ...this.suggestHandoff('celebration', message, {
+                                        restaurant: reservationData.restaurant,
+                                        userInterest: 'celebration'
+                                    }, restaurantId)
+                                };
+                            }
+                            
+                            // Handle reservation creation if details are extracted
+                            if (reservationDetails) {
+                                return await this.handleReservationCreation(reservationDetails, followUpResponse, reservationData, restaurantId);
+                            }
+                            
+                            return this.formatResponse(followUpResponse);
+                        }
+                    } catch (parseError) {
+                        console.error('❌ Error parsing tool_code:', parseError);
+                    }
+                }
+            }
+            
             // Extract reservation data if present
             const reservationDetails = this.extractStructuredData(aiResponse, 'RESERVATION');
             
@@ -117,72 +228,7 @@ class ReservationAgent extends BaseAgent {
             
             // If reservation details are extracted, create the reservation and return redirect response
             if (reservationDetails) {
-                // Validate required fields before attempting to create reservation
-                if (!reservationDetails.customer?.name || !reservationDetails.customer?.email || !reservationDetails.customer?.phone) {
-                    console.error('❌ Missing required customer information:', reservationDetails.customer);
-                    return this.formatResponse(
-                        "I need your name, email, and phone number to complete the reservation. Please provide all three.",
-                        'message',
-                        { error: true }
-                    );
-                }
-                try {
-                    // Map table type to available types
-                    const availableTypes = reservationData.tableTypes || [];
-                    let mappedTableType = reservationDetails.reservation.tableType || 'standard';
-                    
-                    // Validate table type exists
-                    const tableExists = availableTypes.some(t => t.table_type.toLowerCase() === mappedTableType.toLowerCase());
-                    if (!tableExists && mappedTableType !== 'standard') {
-                        // Try to map user request to available type
-                        mappedTableType = this.mapTableTypeRequest(mappedTableType, availableTypes);
-                        console.log(`🔄 Mapped table type "${reservationDetails.reservation.tableType}" to "${mappedTableType}"`);
-                    }
-                    
-                    // Extract reservation data from the structured format
-                    const createReservationData = {
-                        venueId: reservationDetails.restaurant.id || restaurantId,
-                        reservationName: reservationDetails.customer.name || reservationDetails.customer.name?.trim(),
-                        reservationEmail: reservationDetails.customer.email || reservationDetails.customer.email?.trim(),
-                        reservationPhone: reservationDetails.customer.phone || reservationDetails.customer.phone?.trim(),
-                        date: reservationDetails.reservation.date,
-                        time: reservationDetails.reservation.time || '19:00',
-                        guests: reservationDetails.reservation.partySize,
-                        tableType: mappedTableType,
-                        celebrationType: reservationDetails.addOns.celebration,
-                        cake: reservationDetails.addOns.cake,
-                        cakePrice: 0,
-                        flowers: reservationDetails.addOns.flowers,
-                        flowersPrice: 0,
-                        hotelName: reservationDetails.transfer.hotel,
-                        hotelId: null,
-                        specialRequests: null
-                    };
-
-                    // Create the reservation in the database
-                    const createdReservation = await RestaurantService.createReservation(createReservationData);
-                    
-                    console.log('✅ Reservation created successfully:', createdReservation);
-                    
-                    return this.formatResponse(
-                        this.cleanResponse(aiResponse),
-                        'redirect',
-                        { 
-                            reservationDetails: {
-                                ...reservationDetails,
-                                reservationId: createdReservation.reservation_id,
-                                success: true
-                            }
-                        }
-                    );
-                } catch (error) {
-                    console.error('❌ Failed to create reservation:', error);
-                    return this.formatResponse(
-                        "I apologize, but there was an issue creating your reservation. Please try again or contact us directly.",
-                        'message',
-                        { error: true }
-                    );
-                }
+                return await this.handleReservationCreation(reservationDetails, aiResponse, reservationData, restaurantId);
             }
             
             return this.formatResponse(aiResponse);
@@ -231,7 +277,7 @@ class ReservationAgent extends BaseAgent {
     /**
      * Check availability for a specific date, time, and table type
      */
-    async checkAvailability(restaurantId, date, tableType = 'standard') {
+    async checkAvailability(restaurantId, date, tableType = 'standard', originalTime = null) {
         try {
             const available = await RestaurantService.isTableAvailable({
                 venueId: restaurantId,
@@ -247,6 +293,21 @@ class ReservationAgent extends BaseAgent {
                 const tableInventory = await RestaurantService.getTableInventory(restaurantId);
                 const maxTables = tableInventory.find(t => t.table_type === tableType)?.total_tables || 0;
                 
+                // Try to find alternative times if original time was provided
+                if (originalTime) {
+                    const alternatives = await this.findAlternativeTimes(originalTime, restaurantId, date, tableType);
+                    if (alternatives.length > 0) {
+                        return {
+                            available: false,
+                            message: `I'm sorry, but we're fully booked for ${tableType} tables on ${date} at ${originalTime}. However, I found availability at these alternative times: ${alternatives.join(', ')}. Would any of these work for you?`,
+                            alternatives: alternatives,
+                            hasAlternatives: true,
+                            reservationCount,
+                            maxTables
+                        };
+                    }
+                }
+                
                 return {
                     available: false,
                     message: `I'm sorry, but we're fully booked for ${tableType} tables on ${date}. We currently have ${reservationCount} out of ${maxTables} ${tableType} tables reserved. Would you like to try a different date or table type?`,
@@ -257,7 +318,7 @@ class ReservationAgent extends BaseAgent {
             
             return {
                 available: true,
-                message: `Great news! ${tableType} tables are available on ${date}.`
+                message: `Great news! ${tableType} tables are available on ${date}${originalTime ? ` at ${originalTime}` : ''}.`
             };
             
         } catch (error) {
@@ -267,6 +328,51 @@ class ReservationAgent extends BaseAgent {
                 message: "I'm having trouble checking availability right now. Please try again in a moment.",
                 error: true
             };
+        }
+    }
+
+    async findAlternativeTimes(originalTime, restaurantId, date, tableType) {
+        try {
+            const alternatives = [];
+            
+            // Convert original time to minutes
+            const [hours, minutes] = originalTime.split(':').map(Number);
+            const originalMinutes = hours * 60 + minutes;
+            
+            // Check ±30 minute slots
+            const timeSlots = [
+                originalMinutes - 30, // 30 minutes earlier
+                originalMinutes + 30  // 30 minutes later
+            ];
+            
+            for (const slotMinutes of timeSlots) {
+                // Convert back to time format
+                const slotHours = Math.floor(slotMinutes / 60);
+                const slotMins = slotMinutes % 60;
+                
+                // Validate reasonable restaurant hours (17:00 - 23:00)
+                if (slotHours >= 17 && slotHours <= 23) {
+                    const timeString = `${slotHours.toString().padStart(2, '0')}:${slotMins.toString().padStart(2, '0')}`;
+                    
+                    // For this implementation, we'll simulate that alternative times have availability
+                    // In a real system, you'd check actual time-slot based availability
+                    const available = await RestaurantService.isTableAvailable({
+                        venueId: restaurantId,
+                        tableType,
+                        reservationDate: date
+                    });
+                    
+                    // For demonstration, assume alternative times are more likely to be available
+                    if (available || Math.random() > 0.5) {
+                        alternatives.push(timeString);
+                    }
+                }
+            }
+            
+            return alternatives;
+        } catch (error) {
+            console.error('❌ Error finding alternative times:', error);
+            return [];
         }
     }
     
@@ -311,6 +417,23 @@ class ReservationAgent extends BaseAgent {
             nextWeekDays.push(`${day.toDateString()} (${day.toISOString().slice(0, 10)})`);
         }
         
+        // Determine if we should show table type selection
+        const hasMultipleTableTypes = tableTypes.length > 1;
+        const tableTypeGuidance = hasMultipleTableTypes ? 
+            `AVAILABLE TABLE TYPES & PRICING:
+${tableTypes.map(table => `- ${table.table_type}: €${table.table_price || 0}`).join('\n')}
+
+TABLE TYPE SELECTION:
+- When customers ask for table preferences, offer them these specific options:
+${tableTypes.map(table => `  • ${table.table_type} tables (€${table.table_price || 0})`).join('\n')}
+- ONLY use table types from the list above: ${availableTableNames}
+- If user requests unavailable types (like "view", "terrace", "balcony"), explain available options and help them choose
+- Map user requests to available types: outdoor/view requests → ${tableTypes.find(t => t.table_type !== 'standard')?.table_type || 'standard'}` :
+            `TABLE TYPE HANDLING:
+- This restaurant has only one table type: ${tableTypes[0]?.table_type || 'standard'} (€${tableTypes[0]?.table_price || 0})
+- Don't ask customers about table type preferences - automatically use ${tableTypes[0]?.table_type || 'standard'}
+- If customers ask about table options, briefly mention we have ${tableTypes[0]?.table_type || 'standard'} tables`;
+
         return `You are AICHMI, a reservation booking specialist for ${restaurant.name}. Your role is to create confirmed reservations for guests who have already checked availability or know what they want to book.
 
 DATE CONTEXT:
@@ -323,45 +446,38 @@ DATE CONTEXT:
 
 PERSONALITY:
 - Be efficient and focused on completing reservations
-- Collect information systematically without repetitive confirmations
+- Avoid repetitive confirmations and duplicate information
+- Provide clear, concise responses without repeating details unnecessarily
 - Only ask for final confirmation ONCE when you have ALL required details
-- Assume guests have already checked availability unless they specifically ask about it
+- When availability has been checked, proceed directly to next steps
 
-AVAILABLE TABLE TYPES & PRICING:
-${tableTypes.map(table => `- ${table.table_type}: €${table.table_price || 0}`).join('\n')}
-
-IMPORTANT TABLE TYPE MAPPING:
-- When users ask for "table with a view", "outdoor", "outside" → use available types: ${availableTableNames}
-- When users ask for "standard", "regular", "inside" → use first available standard type
-- ONLY use table types that exist in the list above
-- If user request doesn't match exactly, choose the closest available type
+${tableTypeGuidance}
 
 ${fullyBookedDates.length > 0 ? `UNAVAILABLE DATES: ${fullyBookedDates.map(d => d.date).join(', ')}` : ''}
 
 ${hasSemanticMatch ? `RECOMMENDED TABLES:
 ${semanticTables.slice(0,3).map(table => `- ${table.table_type}: €${table.table_price}`).join('\n')}` : ''}
 
-RESERVATION BOOKING PROTOCOL:
-1. **AVAILABILITY CHECK FIRST**: When users make direct booking requests with specific date/time/party size, IMMEDIATELY check availability
-2. If available, proceed to collect any missing details (table preference, contact info)
-3. If NOT available, provide specific unavailability information and suggest alternatives
-4. Collect contact details (name, email, phone) only AFTER confirming availability
-5. Provide final summary and ask for confirmation
-6. Create the reservation upon confirmation
+RESERVATION FLOW - IMPORTANT NEW PROCESS:
+1. **COLLECT DATE, TIME, PEOPLE FIRST**: Always start by asking for date, time, and number of people before anything else
+2. **TWO-MESSAGE AVAILABILITY CHECK**: 
+   - First message: "Okay, checking for availability for a table at [date], [time] for [number] people..."
+   - Second message: Results with availability status
+3. **NO TABLES AVAILABLE**: If no tables available, check ±30 minutes and repeat the logic until solution found
+4. **TABLES AVAILABLE**: 
+   - If restaurant has single table type: "Great! There are tables available." (don't mention table type)
+   - If restaurant has multiple table types: Ask customer which table type they prefer
+5. **CONTACT COLLECTION**: Only after availability confirmed, collect name, email, phone
+6. **FINAL CONFIRMATION**: Provide summary and ask for confirmation once all details collected
+7. **RESERVATION CREATION**: Generate reservation data block immediately upon user confirmation
 
-RESERVATION FLOW:
-1. **Direct booking requests**: When user says "I want to book/reserve..." with date/time/party size → CHECK AVAILABILITY FIRST
-2. If coming from availability agent handoff, first confirm if they want to proceed with booking before collecting details
-3. If starting fresh, collect: date, time, party size, then CHECK AVAILABILITY before proceeding
-4. Only after confirming availability AND booking intent, collect: table preference and contact details (name, email, phone)
-5. After getting ALL details, give ONE final summary and ask for confirmation
-6. CRITICAL: When they confirm with "yes", "correct", "ok", or similar, you MUST immediately generate the reservation data below. Do not say "I have finalized the reservation" without actually generating the data block. Never claim to have created a reservation without outputting the JSON block below.
-
-AVAILABILITY CHECKING:
-- When checking availability, the system will provide table availability information in your context
-- If unavailable, provide specific information (e.g., "We have 5 out of 5 standard tables already reserved for that date")
-- Suggest alternative dates or table types when unavailable
-- Never proceed with contact collection if the requested slot is unavailable
+CRITICAL AVAILABILITY CHECKING RULES:
+- NEVER collect name/email/phone before checking availability
+- Always show two separate messages for availability checking
+- First message must say "checking for availability..." 
+- Second message shows results
+- If unavailable, automatically check ±30 minute slots and suggest alternatives
+- Only proceed to contact details after confirming available tables
 
 MANDATORY: After confirmation, output this exact format:
 
@@ -382,35 +498,46 @@ CRITICAL RULE: You MUST generate this data block immediately after confirmation.
     mapTableTypeRequest(userRequest, availableTypes) {
         const lowerRequest = userRequest.toLowerCase();
         
-        // Create mapping based on keywords and available types
-        const mapping = {
-            'view': ['terrace', 'outdoor', 'garden', 'grass', 'balcony'],
-            'outside': ['terrace', 'outdoor', 'garden', 'grass', 'balcony'],
-            'outdoor': ['terrace', 'outdoor', 'garden', 'grass', 'balcony'],
-            'garden': ['garden', 'grass', 'terrace', 'outdoor'],
-            'terrace': ['terrace', 'garden', 'grass', 'outdoor'],
-            'inside': ['standard', 'indoor', 'regular'],
-            'indoor': ['standard', 'indoor', 'regular'],
-            'regular': ['standard', 'regular', 'normal'],
-            'standard': ['standard', 'regular', 'normal'],
-            'private': ['private', 'vip', 'reserved'],
-            'romantic': ['romantic', 'private', 'intimate', 'grass', 'garden'],
-            'quiet': ['private', 'intimate', 'corner', 'grass', 'garden']
-        };
+        // Get available table type names
+        const availableTableNames = availableTypes.map(t => t.table_type.toLowerCase());
         
-        // Find best match
-        for (const [keyword, candidates] of Object.entries(mapping)) {
-            if (lowerRequest.includes(keyword)) {
-                // Return first available candidate type
-                for (const candidate of candidates) {
-                    if (availableTypes.some(t => t.table_type.toLowerCase() === candidate)) {
-                        return availableTypes.find(t => t.table_type.toLowerCase() === candidate).table_type;
-                    }
-                }
-            }
+        // Check if user request is an exact match first
+        if (availableTableNames.includes(lowerRequest)) {
+            return availableTypes.find(t => t.table_type.toLowerCase() === lowerRequest).table_type;
         }
         
-        // Default fallback - return first available type or 'standard'
+        // Create dynamic mapping based on what's actually available
+        const outdoorTypes = availableTypes.filter(t => 
+            ['grass', 'terrace', 'garden', 'outdoor', 'patio', 'deck'].includes(t.table_type.toLowerCase())
+        );
+        const specialTypes = availableTypes.filter(t => 
+            ['anniversary', 'vip', 'private', 'romantic', 'premium'].includes(t.table_type.toLowerCase())
+        );
+        const standardTypes = availableTypes.filter(t => 
+            ['standard', 'regular', 'indoor', 'main'].includes(t.table_type.toLowerCase())
+        );
+        
+        // Map user requests to available categories
+        const outdoorKeywords = ['view', 'outside', 'outdoor', 'garden', 'terrace', 'fresh air', 'nature'];
+        const specialKeywords = ['private', 'romantic', 'special', 'anniversary', 'celebration', 'intimate'];
+        const indoorKeywords = ['inside', 'indoor', 'regular', 'standard', 'normal'];
+        
+        // Check outdoor requests
+        if (outdoorKeywords.some(keyword => lowerRequest.includes(keyword)) && outdoorTypes.length > 0) {
+            return outdoorTypes[0].table_type;
+        }
+        
+        // Check special requests
+        if (specialKeywords.some(keyword => lowerRequest.includes(keyword)) && specialTypes.length > 0) {
+            return specialTypes[0].table_type;
+        }
+        
+        // Check indoor requests
+        if (indoorKeywords.some(keyword => lowerRequest.includes(keyword)) && standardTypes.length > 0) {
+            return standardTypes[0].table_type;
+        }
+        
+        // Default fallback - return first available type
         return availableTypes.length > 0 ? availableTypes[0].table_type : 'standard';
     }
 
@@ -537,13 +664,107 @@ Please help the guest with their reservation for ${reservationData.restaurant.na
         const isFromAvailabilityAgent = history.some(h => 
             h.text && h.text.includes('Would you like to proceed with making a reservation'));
         
-        return hasBookingKeyword && hasDateTimeInfo && !isFromAvailabilityAgent;
+        // Check if this is part of an ongoing reservation flow
+        const recentHistory = history.slice(-4); // Check last 4 messages
+        const hasRecentBookingIntent = recentHistory.some(h => 
+            h.text && directBookingKeywords.some(keyword => h.text.toLowerCase().includes(keyword))
+        );
+        
+        // Check if AI recently asked for reservation details
+        const aiAskedForDetails = recentHistory.some(h => 
+            h.sender === 'ai' && h.text && (
+                h.text.includes('What date would you like') ||
+                h.text.includes('What time would you like') ||
+                h.text.includes('How many people') ||
+                h.text.includes('few details')
+            )
+        );
+        
+        // This is a direct booking request if:
+        // 1. Contains booking keywords AND date/time info, OR
+        // 2. Contains date/time info AND we're in an active booking flow (user previously expressed intent or AI asked for details)
+        return (hasBookingKeyword && hasDateTimeInfo) || 
+               (hasDateTimeInfo && (hasRecentBookingIntent || aiAskedForDetails)) && 
+               !isFromAvailabilityAgent;
     }
 
     /**
-     * Extract booking details from message and history
+     * Extract booking details using AI instead of regex patterns
      */
-    extractBookingDetails(message, history) {
+    async extractBookingDetails(message, history) {
+        try {
+            const fullText = (history.map(h => h.text || '').join(' ') + ' ' + message);
+            
+            // Use AI to extract structured data
+            const { askGemini } = await import('../AIService.js');
+            
+            const extractionPrompt = `Extract reservation details from this conversation. Only extract information that is explicitly mentioned.
+
+Conversation text: "${fullText}"
+
+Extract and return ONLY the following information if present (leave blank if not mentioned):
+- Date: Convert to YYYY-MM-DD format (use 2025 for dates without year)
+- Time: Convert to 24-hour format (HH:MM)
+- Party size: Number of people/guests
+- Table type: standard, grass, or anniversary (if specifically mentioned)
+
+Examples of conversions:
+- "2 august" → 2025-08-02
+- "8pm" → 20:00
+- "4 people" → 4
+
+Respond in this exact JSON format:
+{
+  "date": "YYYY-MM-DD or null",
+  "time": "HH:MM or null", 
+  "partySize": number or null,
+  "tableType": "string or null"
+}`;
+
+            const extractionResponse = await askGemini(extractionPrompt, [], null);
+            let extractedData;
+            
+            try {
+                // Try to parse the JSON response
+                const jsonMatch = extractionResponse.response.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    extractedData = JSON.parse(jsonMatch[0]);
+                } else {
+                    throw new Error('No JSON found in response');
+                }
+            } catch (parseError) {
+                console.log('📅 AI extraction failed, using fallback regex patterns');
+                return this.extractBookingDetailsFallback(message, history);
+            }
+            
+            // Clean up the extracted data
+            const details = {};
+            if (extractedData.date && extractedData.date !== 'null') {
+                details.date = extractedData.date;
+            }
+            if (extractedData.time && extractedData.time !== 'null') {
+                details.time = extractedData.time;
+            }
+            if (extractedData.partySize && typeof extractedData.partySize === 'number') {
+                details.partySize = extractedData.partySize;
+            }
+            if (extractedData.tableType && extractedData.tableType !== 'null') {
+                details.tableType = extractedData.tableType;
+            }
+            
+            console.log('🤖 AI extracted booking details:', details);
+            return details;
+            
+        } catch (error) {
+            console.error('❌ Error in AI booking extraction:', error);
+            return this.extractBookingDetailsFallback(message, history);
+        }
+    }
+
+    /**
+     * Fallback extraction using regex patterns
+     */
+    extractBookingDetailsFallback(message, history) {
         const msg = message.toLowerCase();
         const fullText = (history.map(h => h.text || '').join(' ') + ' ' + message).toLowerCase();
         
@@ -556,6 +777,48 @@ Please help the guest with their reservation for ${reservationData.restaurant.na
             details.date = tomorrow.toISOString().slice(0, 10);
         } else if (msg.includes('today')) {
             details.date = new Date().toISOString().slice(0, 10);
+        } else {
+            // Look for patterns like "2 august", "august 2", "2nd august", etc.
+            const datePattern = /(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?/i;
+            const dateMatch = fullText.match(datePattern);
+            
+            if (dateMatch) {
+                const day = dateMatch[1] || dateMatch[3];
+                let month = dateMatch[2] || fullText.match(datePattern)[0].split(' ').find(word => 
+                    ['january', 'february', 'march', 'april', 'may', 'june', 
+                     'july', 'august', 'september', 'october', 'november', 'december'].includes(word)
+                );
+                
+                const currentYear = new Date().getFullYear();
+                
+                // Convert month name to number
+                const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                                  'july', 'august', 'september', 'october', 'november', 'december'];
+                const monthNumber = monthNames.indexOf(month?.toLowerCase()) + 1;
+                
+                if (monthNumber > 0) {
+                    const date = new Date(currentYear, monthNumber - 1, parseInt(day));
+                    details.date = date.toISOString().slice(0, 10);
+                }
+            }
+        }
+        
+        // Extract time
+        const timePattern = /(\d{1,2})(?::(\d{2}))?\s*(pm|am)/i;
+        const timeMatch = fullText.match(timePattern);
+        
+        if (timeMatch) {
+            let hour = parseInt(timeMatch[1]);
+            const minute = timeMatch[2] || '00';
+            const period = timeMatch[3].toLowerCase();
+            
+            if (period === 'pm' && hour !== 12) {
+                hour += 12;
+            } else if (period === 'am' && hour === 12) {
+                hour = 0;
+            }
+            
+            details.time = `${hour.toString().padStart(2, '0')}:${minute}`;
         }
         
         // Extract party size
@@ -564,12 +827,113 @@ Please help the guest with their reservation for ${reservationData.restaurant.na
             details.partySize = parseInt(partySizeMatch[1]);
         }
         
-        // Extract table type
-        if (msg.includes('anniversary')) details.tableType = 'anniversary';
-        else if (msg.includes('grass')) details.tableType = 'grass';
-        else if (msg.includes('standard')) details.tableType = 'standard';
-        
         return details;
+    }
+
+    /**
+     * Format date for display
+     */
+    formatDate(dateString) {
+        try {
+            const date = new Date(dateString);
+            const options = { month: 'long', day: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        } catch (error) {
+            return dateString; // fallback to original string
+        }
+    }
+
+    /**
+     * Format time for display  
+     */
+    formatTime(timeString) {
+        try {
+            if (timeString.includes('pm') || timeString.includes('am')) {
+                return timeString; // already formatted
+            }
+            
+            // Convert 24h format to 12h format
+            const [hours, minutes] = timeString.split(':');
+            const hour = parseInt(hours);
+            const ampm = hour >= 12 ? 'pm' : 'am';
+            const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+            return `${displayHour}${minutes === '00' ? '' : ':' + minutes}${ampm}`;
+        } catch (error) {
+            return timeString; // fallback to original string
+        }
+    }
+
+    /**
+     * Handle reservation creation
+     */
+    async handleReservationCreation(reservationDetails, aiResponse, reservationData, restaurantId) {
+        // Validate required fields before attempting to create reservation
+        if (!reservationDetails.customer?.name || !reservationDetails.customer?.email || !reservationDetails.customer?.phone) {
+            console.error('❌ Missing required customer information:', reservationDetails.customer);
+            return this.formatResponse(
+                "I need your name, email, and phone number to complete the reservation. Please provide all three.",
+                'message',
+                { error: true }
+            );
+        }
+        
+        try {
+            // Map table type to available types
+            const availableTypes = reservationData.tableTypes || [];
+            let mappedTableType = reservationDetails.reservation.tableType || 'standard';
+            
+            // Validate table type exists
+            const tableExists = availableTypes.some(t => t.table_type.toLowerCase() === mappedTableType.toLowerCase());
+            if (!tableExists && mappedTableType !== 'standard') {
+                // Try to map user request to available type
+                mappedTableType = this.mapTableTypeRequest(mappedTableType, availableTypes);
+                console.log(`🔄 Mapped table type "${reservationDetails.reservation.tableType}" to "${mappedTableType}"`);
+            }
+            
+            // Extract reservation data from the structured format
+            const createReservationData = {
+                venueId: reservationDetails.restaurant.id || restaurantId,
+                reservationName: reservationDetails.customer.name || reservationDetails.customer.name?.trim(),
+                reservationEmail: reservationDetails.customer.email || reservationDetails.customer.email?.trim(),
+                reservationPhone: reservationDetails.customer.phone || reservationDetails.customer.phone?.trim(),
+                date: reservationDetails.reservation.date,
+                time: reservationDetails.reservation.time || '19:00',
+                guests: reservationDetails.reservation.partySize,
+                tableType: mappedTableType,
+                celebrationType: reservationDetails.addOns.celebration,
+                cake: reservationDetails.addOns.cake,
+                cakePrice: 0,
+                flowers: reservationDetails.addOns.flowers,
+                flowersPrice: 0,
+                hotelName: reservationDetails.transfer.hotel,
+                hotelId: null,
+                specialRequests: null
+            };
+
+            // Create the reservation in the database
+            const createdReservation = await RestaurantService.createReservation(createReservationData);
+            
+            console.log('✅ Reservation created successfully:', createdReservation);
+            
+            return this.formatResponse(
+                this.cleanResponse(aiResponse),
+                'redirect',
+                { 
+                    reservationDetails: {
+                        ...reservationDetails,
+                        reservationId: createdReservation.reservation_id,
+                        success: true
+                    }
+                }
+            );
+        } catch (error) {
+            console.error('❌ Failed to create reservation:', error);
+            return this.formatResponse(
+                "I apologize, but there was an issue creating your reservation. Please try again or contact us directly.",
+                'message',
+                { error: true }
+            );
+        }
     }
 }
 

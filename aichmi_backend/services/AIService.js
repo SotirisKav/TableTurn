@@ -22,13 +22,13 @@ async function fetchRelevantData(prompt, restaurantId = null) {
         keywords.includes(r.name.toLowerCase())
       );
       if (found) {
-        restaurantId = found.venue_id || found.id;
+        restaurantId = found.restaurant_id || found.id;
         relevantData.restaurants.push(found);
 
         const ownerQuery = `
-          SELECT o.*, v.name as restaurant_name FROM owners o
-          JOIN venue v ON o.venue_id = v.venue_id
-          WHERE v.venue_id = $1
+          SELECT o.*, r.name as restaurant_name FROM owners o
+          JOIN restaurant r ON o.restaurant_id = r.restaurant_id
+          WHERE r.restaurant_id = $1
         `;
         const ownerResult = await db.query(ownerQuery, [restaurantId]);
         relevantData.owners = ownerResult; 
@@ -78,9 +78,9 @@ async function fetchRelevantData(prompt, restaurantId = null) {
 
     // Add debugging for owner data too:
     const ownerQuery = `
-      SELECT o.*, v.name as restaurant_name FROM owners o
-      JOIN venue v ON o.venue_id = v.venue_id
-      WHERE v.venue_id = $1
+      SELECT o.*, r.name as restaurant_name FROM owners o
+      JOIN restaurant r ON o.restaurant_id = r.restaurant_id
+      WHERE r.restaurant_id = $1
     `;
     const ownerResult = await db.query(ownerQuery, [restaurantId]);
     console.log('🔍 OWNER DATA FETCHED:', ownerResult); // Add this debug line
@@ -97,9 +97,9 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       restaurantId // Always fetch owner data when we have a restaurant ID
     ) {
       const ownerQuery = `
-        SELECT o.*, v.name as restaurant_name FROM owners o
-        JOIN venue v ON o.venue_id = v.venue_id
-        WHERE ${restaurantId ? 'v.venue_id = $1' : 'v.type = \'restaurant\''}
+        SELECT o.*, r.name as restaurant_name FROM owners o
+        JOIN restaurant r ON o.restaurant_id = r.restaurant_id
+        WHERE ${restaurantId ? 'r.restaurant_id = $1' : '1=1'}
       `;
       const ownerResult = restaurantId 
         ? await db.query(ownerQuery, [restaurantId])
@@ -140,7 +140,7 @@ async function fetchRelevantData(prompt, restaurantId = null) {
       keywords.includes('reserve') ||
       keywords.includes('date')
     ) {
-      const bookedDatesQuery = `SELECT * FROM fully_booked_dates WHERE venue_id = $1 OR venue_id IS NULL`;
+      const bookedDatesQuery = `SELECT * FROM fully_booked_dates WHERE restaurant_id = $1 OR restaurant_id IS NULL`;
       const bookedResult = restaurantId
         ? await db.query(bookedDatesQuery, [restaurantId])
         : await db.query(`SELECT * FROM fully_booked_dates`);

@@ -286,6 +286,7 @@ Please help the guest with menu information for ${menuData.restaurant.name}. Pro
         const msg = message.toLowerCase();
         return specificQueries.some(query => msg.includes(query));
     }
+
 }
 
 export default MenuPricingAgent;
