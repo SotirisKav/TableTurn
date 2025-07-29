@@ -3,24 +3,37 @@ import db from '../config/database.js';
 function toISODate(dateString) {
   if (!dateString) return null;
   
+  console.log(`📅 toISODate input: "${dateString}"`);
+  
+  // If already in ISO format (YYYY-MM-DD), return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString.trim())) {
+    console.log(`📅 toISODate returning ISO format as-is: "${dateString.trim()}"`);
+    return dateString.trim();
+  }
+  
   // Handle various date formats and ensure current year if not specified
   const currentYear = new Date().getFullYear();
   let normalizedDate = dateString.trim();
   
   // Remove ordinal suffixes (st, nd, rd, th)
-  normalizedDate = normalizedDate.replace(/(\d+)(st|nd|rd|th)/g, '$1');
+  normalizedDate = normalizedDate.replace(/(\\d+)(st|nd|rd|th)/g, '$1');
   
   // If the date string doesn't contain a year, append current year
-  if (!/\d{4}/.test(normalizedDate)) {
+  if (!/\\d{4}/.test(normalizedDate)) {
     normalizedDate = `${normalizedDate}, ${currentYear}`;
   }
   
   const d = new Date(normalizedDate);
+  console.log(`📅 toISODate parsed date: ${d}, isNaN: ${isNaN(d)}`);
   if (isNaN(d)) return null;
   
   // Check if the parsed date is in the past, and if so, use next year
+  // Compare only dates, not times to avoid same-day issues
   const today = new Date();
-  if (d < today && d.getFullYear() === currentYear) {
+  const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const reservationDateOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  
+  if (reservationDateOnly < todayDateOnly && d.getFullYear() === currentYear) {
     // If date has passed this year, assume user means next year
     const nextYear = currentYear + 1;
     normalizedDate = normalizedDate.replace(currentYear.toString(), nextYear.toString());
@@ -261,10 +274,9 @@ class RestaurantService {
                     category,
                     is_vegetarian,
                     is_vegan,
-                    is_gluten_free,
-                    available
+                    is_gluten_free
                 FROM menu_item
-                WHERE restaurant_id = $1 AND available = true
+                WHERE restaurant_id = $1 
                 ORDER BY category, name;
             `;
             
@@ -442,11 +454,11 @@ class RestaurantService {
             const query = `
                 SELECT 
                     table_type,
-                    table_price as price_per_person
+                    table_price
                 FROM tables
                 WHERE restaurant_id = $1
                 GROUP BY table_type, table_price
-                ORDER BY table_type;
+                ORDER BY table_price ASC, table_type ASC;
             `;
             
             const result = await db.query(query, [restaurantId]);
@@ -464,7 +476,7 @@ class RestaurantService {
             const query = `
                 SELECT COUNT(*) as count
                 FROM fully_booked_dates
-                WHERE venue_id = $1 AND fully_booked_date = $2;
+                WHERE restaurant_id = $1 AND fully_booked_date = $2;
             `;
             
             const result = await db.query(query, [venueId, date]);
@@ -491,7 +503,7 @@ class RestaurantService {
                     is_vegan,
                     is_gluten_free
                 FROM menu_item
-                WHERE venue_id = $1
+                WHERE restaurant_id = $1
                 ORDER BY category, price ASC;
             `;
             const result = await db.query(query, [venueId]);
@@ -502,27 +514,130 @@ class RestaurantService {
         }
     }
     
-    // Check if a table of a given type is available for a venue on a specific date
-    static async isTableAvailable({ venueId, tableType, reservationDate }) {
-        // 1. Get max tables for this type from the table_type_counts view
-        const invRes = await db.query(
-          'SELECT total_tables FROM table_type_counts WHERE restaurant_id = $1 AND table_type = $2',
-          [venueId, tableType]
-        );
-        if (invRes.length === 0) {
-          throw new Error(`No tables of type "${tableType}" available at this restaurant.`);
+    // Check if a table of a given type is available for a venue on a specific date and optionally time
+    static async isTableAvailable({ venueId, tableType, reservationDate, reservationTime = null }) {
+        try {
+            // 1. Get max tables for this type from the table_type_counts view
+            const invRes = await db.query(
+              'SELECT total_tables FROM table_type_counts WHERE restaurant_id = $1 AND table_type = $2',
+              [venueId, tableType]
+            );
+            if (invRes.length === 0) {
+              throw new Error(`No tables of type "${tableType}" available at this restaurant.`);
+            }
+            const maxTables = invRes[0].total_tables;
+
+            // 2. Get restaurant's minimum gap hours
+            const restaurantRes = await db.query(
+                'SELECT min_reservation_gap_hours FROM restaurant WHERE restaurant_id = $1',
+                [venueId]
+            );
+            const minGapHours = restaurantRes[0]?.min_reservation_gap_hours || 2;
+
+            let reservedCount = 0;
+
+            if (reservationTime) {
+                // 3. Time-specific availability check: count reservations that conflict with the gap window
+                const requestedDateTime = `${reservationDate} ${reservationTime}`;
+                
+                // Fix: Check if the absolute time difference is less than the minimum gap
+                const timeBasedQuery = `
+                    SELECT COUNT(*) as count
+                    FROM reservation 
+                    WHERE restaurant_id = $1 
+                      AND table_type = $2 
+                      AND reservation_date = $3
+                      AND (
+                          -- Check if existing reservation is too close to the requested time
+                          ABS(EXTRACT(EPOCH FROM (reservation_date + reservation_time) - $4::timestamp)) / 3600 < $5
+                      )
+                `;
+                
+                console.log(`🔍 Debug query - requested time: ${requestedDateTime}, gap: ${minGapHours}h`);
+                console.log(`🔍 Debug query - conflict window: ${requestedDateTime} ± ${minGapHours} hours`);
+                
+                const timeRes = await db.query(timeBasedQuery, [venueId, tableType, reservationDate, requestedDateTime, minGapHours]);
+                reservedCount = Number(timeRes[0].count);
+                
+                // Debug: Let's also see what reservations exist for this date/type
+                const debugQuery = `
+                    SELECT reservation_time, (reservation_date + reservation_time) as full_datetime
+                    FROM reservation 
+                    WHERE restaurant_id = $1 AND table_type = $2 AND reservation_date = $3
+                `;
+                const debugRes = await db.query(debugQuery, [venueId, tableType, reservationDate]);
+                console.log(`🔍 Debug: Existing ${tableType} reservations on ${reservationDate}:`, debugRes);
+                
+                console.log(`🔍 Time-based availability check: ${reservedCount}/${maxTables} ${tableType} tables have conflicts within ${minGapHours}h of ${reservationTime} on ${reservationDate}`);
+            } else {
+                // 4. Date-only check: count all reservations for this type and date (legacy behavior)
+                const dateOnlyQuery = 'SELECT COUNT(*) as count FROM reservation WHERE restaurant_id = $1 AND table_type = $2 AND reservation_date = $3';
+                const dateRes = await db.query(dateOnlyQuery, [venueId, tableType, reservationDate]);
+                reservedCount = Number(dateRes[0].count);
+                
+                console.log(`🔍 Date-only availability check: ${reservedCount}/${maxTables} ${tableType} tables reserved for entire day ${reservationDate}`);
+            }
+
+            // 5. Return true if we have available tables (no conflicts for time-based, or not fully booked for date-only)
+            const available = reservedCount < maxTables;
+            console.log(`${available ? '✅' : '❌'} ${tableType} tables ${available ? 'available' : 'unavailable'} - ${maxTables - reservedCount} tables free`);
+            
+            return available;
+        } catch (error) {
+            console.error('❌ Error checking table availability:', error);
+            return false;
         }
-        const maxTables = invRes[0].total_tables;
+    }
 
-        // 2. Count existing reservations for this type
-        const resRes = await db.query(
-          'SELECT COUNT(*) FROM reservation WHERE restaurant_id = $1 AND table_type = $2 AND reservation_date = $3',
-          [venueId, tableType, reservationDate]
-        );
-        const reservedCount = Number(resRes[0].count);
-
-        // 3. Check if available
-        return reservedCount < maxTables;
+    // New method to check reservation gap constraints
+    static async checkReservationGap(restaurantId, reservationDate, reservationTime) {
+        try {
+            // Get restaurant's minimum gap requirement
+            const restaurantQuery = 'SELECT min_reservation_gap_hours FROM restaurant WHERE restaurant_id = $1';
+            const restaurantRes = await db.query(restaurantQuery, [restaurantId]);
+            
+            if (restaurantRes.length === 0) {
+                return { available: false, reason: 'Restaurant not found' };
+            }
+            
+            const minGapHours = restaurantRes[0].min_reservation_gap_hours || 2;
+            
+            // Create the proposed reservation datetime
+            const proposedDateTime = `${reservationDate} ${reservationTime}`;
+            
+            // Check for conflicting reservations within the gap window
+            const gapCheckQuery = `
+                SELECT COUNT(*) as conflicts
+                FROM reservation 
+                WHERE restaurant_id = $1 
+                AND (
+                    -- Check if existing reservation conflicts with gap window
+                    (reservation_date + reservation_time) > ($2::timestamp - interval '${minGapHours} hours')
+                    AND (reservation_date + reservation_time) < ($2::timestamp + interval '${minGapHours} hours')
+                    AND (reservation_date + reservation_time) != $2::timestamp
+                )
+            `;
+            
+            const gapRes = await db.query(gapCheckQuery, [restaurantId, proposedDateTime]);
+            const conflicts = parseInt(gapRes[0].conflicts);
+            
+            console.log(`🕐 Gap check: ${conflicts} conflicting reservations within ${minGapHours} hours of ${proposedDateTime}`);
+            
+            if (conflicts > 0) {
+                return { 
+                    available: false, 
+                    reason: 'gap_conflict',
+                    message: `Reservation conflicts with minimum gap requirement of ${minGapHours} hours. Please choose a different time.`,
+                    minGapHours,
+                    conflicts
+                };
+            }
+            
+            return { available: true, minGapHours };
+        } catch (error) {
+            console.error('❌ Error checking reservation gap:', error);
+            return { available: false, reason: 'error', error: error.message };
+        }
     }
     
     static async createReservation({
@@ -539,8 +654,6 @@ class RestaurantService {
       cakePrice = null,
       flowers = false,
       flowersPrice = null,
-      hotelName = null,
-      hotelId = null,
       specialRequests = null
     }) {
       // 1. Check table availability
@@ -553,7 +666,19 @@ class RestaurantService {
         throw new Error('No tables of this type available for the selected date.');
       }
 
-      // 2. Insert reservation
+      // 2. Find and assign a specific table that doesn't have gap conflicts
+      const assignedTableId = await this.findAvailableTableWithGapCheck(
+        venueId, 
+        tableType, 
+        toISODate(date), 
+        time,
+        guests
+      );
+      
+      // Note: assignedTableId will be null, which is expected
+      // The database trigger will handle table assignment with proper gap checking
+
+      // 3. Insert reservation with assigned table_id
       const query = `
         INSERT INTO reservation (
           reservation_name,
@@ -568,10 +693,9 @@ class RestaurantService {
           cake_price,
           flowers,
           flowers_price,
-          hotel_name,
-          hotel_id,
-          restaurant_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          restaurant_id,
+          table_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         RETURNING *;
       `;
       const values = [
@@ -587,12 +711,58 @@ class RestaurantService {
         cakePrice,
         flowers,
         flowersPrice,
-        hotelName,
-        hotelId,
-        venueId
+        venueId,
+        assignedTableId
       ];
       const result = await db.query(query, values);
       return result[0];
+    }
+
+    // Find an available table of the specified type that doesn't have gap conflicts
+    static async findAvailableTableWithGapCheck(restaurantId, tableType, reservationDate, reservationTime, partySize) {
+        // KISS: Let the database trigger handle table assignment with proper gap checking
+        // The assign_available_table() trigger will automatically find the lowest table_id
+        // that meets all criteria including gap requirements
+        
+        console.log(`🔍 Using database trigger for table assignment: ${tableType} table for ${partySize} people on ${reservationDate} at ${reservationTime}`);
+        
+        // Return null to indicate no specific table_id should be pre-assigned
+        // The database trigger will handle the assignment automatically
+        return null;
+    }
+
+    // Check if a specific table has gap conflicts for the proposed time
+    static async checkTableGapConflict(restaurantId, tableId, reservationDate, reservationTime, minGapHours) {
+        try {
+            console.log(`🔍 Gap check params: date="${reservationDate}", time="${reservationTime}"`);
+            const proposedDateTime = `${reservationDate} ${reservationTime}`;
+            console.log(`🔍 Proposed datetime: "${proposedDateTime}"`);
+            
+            // FIXED: Check for conflicting reservations using ABS to calculate actual time difference
+            const gapCheckQuery = `
+                SELECT COUNT(*) as conflicts
+                FROM reservation 
+                WHERE restaurant_id = $1 
+                  AND table_id = $2
+                  AND reservation_date = $3
+                  AND (
+                      -- Check if existing reservation conflicts with gap window using absolute time difference
+                      ABS(EXTRACT(EPOCH FROM ((reservation_date + reservation_time) - $4::timestamp))) < (${minGapHours} * 3600)
+                      AND (reservation_date + reservation_time) != $4::timestamp
+                  )
+            `;
+            
+            const gapRes = await db.query(gapCheckQuery, [restaurantId, tableId, reservationDate, proposedDateTime]);
+            const conflicts = parseInt(gapRes[0].conflicts);
+            
+            console.log(`🕐 Table ${tableId} gap check: ${conflicts} conflicting reservations within ${minGapHours} hours of ${proposedDateTime}`);
+            
+            return conflicts > 0;
+            
+        } catch (error) {
+            console.error('❌ Error checking table gap conflict:', error);
+            return true; // Assume conflict on error for safety
+        }
     }
 
     // NEW: Create restaurant with Google Maps location data
@@ -655,7 +825,7 @@ class RestaurantService {
                         ELSE '€€'
                     END as priceRange
                 FROM venue v
-                LEFT JOIN owners o ON v.venue_id = o.venue_id
+                LEFT JOIN owners o ON r.restaurant_id = o.restaurant_id
                 WHERE v.type = 'restaurant' AND v.island ILIKE $1
                 ORDER BY v.rating DESC
             `;
@@ -694,7 +864,7 @@ class RestaurantService {
                         ELSE '€€'
                     END as priceRange
                 FROM venue v
-                LEFT JOIN owners o ON v.venue_id = o.venue_id
+                LEFT JOIN owners o ON r.restaurant_id = o.restaurant_id
                 WHERE v.type = 'restaurant' AND v.island ILIKE $1 AND v.area ILIKE $2
                 ORDER BY v.rating DESC
             `;
@@ -714,7 +884,7 @@ class RestaurantService {
             const query = `
                 UPDATE venue 
                 SET address = $2, area = $3, island = $4, google_place_id = $5
-                WHERE venue_id = $1 AND type = 'restaurant'
+                WHERE restaurant_id = $1 AND type = 'restaurant'
                 RETURNING venue_id, name, address, area, island, google_place_id
             `;
 
@@ -760,7 +930,7 @@ class RestaurantService {
                         ELSE '€€'
                     END as priceRange
                 FROM venue v
-                LEFT JOIN owners o ON v.venue_id = o.venue_id
+                LEFT JOIN owners o ON r.restaurant_id = o.restaurant_id
                 WHERE v.type = 'restaurant'
             `;
 
@@ -839,6 +1009,25 @@ class RestaurantService {
             throw error;
         }
     }
+    /**
+     * Get available table types for a specific time using the database function
+     */
+    static async getAvailableTableTypesForTime(params) {
+        try {
+            const { restaurantId, reservationDate, reservationTime, guests } = params;
+            const query = `
+                SELECT table_type, table_price, capacity 
+                FROM get_available_table_types($1, $2, $3, $4)
+            `;
+            const result = await db.query(query, [restaurantId, reservationDate, reservationTime, guests]);
+            return result;
+        } catch (error) {
+            console.error('Error fetching available table types for time:', error);
+            throw error;
+        }
+    }
+    
+
 }
 
 export default RestaurantService;

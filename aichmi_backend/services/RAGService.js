@@ -330,12 +330,10 @@ class RAGService {
                     is_vegetarian,
                     is_vegan,
                     is_gluten_free,
-                    available,
                     embedding,
                     (embedding <=> $1::vector) as distance
                 FROM menu_item 
                 WHERE restaurant_id = $2 
-                    AND available = true
                     AND embedding IS NOT NULL
             `;
             
@@ -427,10 +425,8 @@ class RAGService {
                     is_vegetarian,
                     is_vegan,
                     is_gluten_free,
-                    available
                 FROM menu_item 
                 WHERE restaurant_id = $1 
-                    AND available = true
             `;
             
             const queryParams = [restaurantId];
@@ -568,12 +564,10 @@ class RAGService {
             // For now, celebration data is static, but could be from database
             relevantData.celebrations = {
                 available: true,
-                services: ['cake', 'flowers', 'champagne', 'decorations'],
+                services: ['cake', 'flowers'],
                 pricing: {
                     cake: { price: 25, description: 'Beautiful celebration cake with personalized message' },
-                    flowers: { price: 15, description: 'Fresh flower arrangement for your table' },
-                    champagne: { price: 35, description: 'Bottle of champagne for toasting' },
-                    decorations: { price: 20, description: 'Table decorations for special occasions' }
+                    flowers: { price: 15, description: 'Fresh flower arrangement for your table' }
                 }
             };
         } catch (error) {
@@ -589,10 +583,11 @@ class RAGService {
             // Check if transfer pricing exists
             const transferQuery = `
                 SELECT 
-                    pickup_location,
-                    destination,
-                    price,
-                    vehicle_type
+                    transfer_id,
+                    price_4_or_less,
+                    price_5_to_8,
+                    hotel_id,
+                    restaurant_id
                 FROM transfer_prices 
                 WHERE restaurant_id = $1;
             `;
@@ -753,7 +748,6 @@ class RAGService {
                     (embedding <=> $1::vector) as distance
                 FROM menu_item 
                 WHERE restaurant_id = $2 
-                    AND available = true
                     AND embedding IS NOT NULL
                 ORDER BY embedding <=> $1::vector
                 LIMIT $3;
@@ -836,7 +830,6 @@ class RAGService {
                         is_vegetarian,
                         is_vegan,
                         is_gluten_free,
-                        available,
                         restaurant_id
                     `;
                     break;

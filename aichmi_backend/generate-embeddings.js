@@ -77,7 +77,7 @@ async function generateEmbeddings() {
             const menuTest = await RAGService.hybridSearch(
                 'seafood dish',
                 'menu_item',
-                { available: true },
+                {},
                 3
             );
             
@@ -90,7 +90,7 @@ async function generateEmbeddings() {
             const dessertTest = await RAGService.hybridSearch(
                 'sweet dessert',
                 'menu_item',
-                { available: true },
+                {},
                 2
             );
             

@@ -2,7 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import '../styles/TableMap.css';
 
 function TableMap({ restaurantId }) {
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(() => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+        console.log('Initial date set to:', dateString, 'from', today);
+        return dateString;
+    });
     const [tables, setTables] = useState([]);
     const [reservations, setReservations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -15,6 +23,8 @@ function TableMap({ restaurantId }) {
     const [statusMode, setStatusMode] = useState(false);
     const [selectedTime, setSelectedTime] = useState('12:00');
     const [restaurantHours, setRestaurantHours] = useState({ open: '12:00', close: '23:30' });
+    const [minReservationGapHours, setMinReservationGapHours] = useState(3); // Default to 3 hours to match common restaurant setting
+    const [forceRefresh, setForceRefresh] = useState(0);
     const dragRef = useRef(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [selectedTableModal, setSelectedTableModal] = useState(null);
@@ -60,6 +70,10 @@ function TableMap({ restaurantId }) {
                 
                 if (restaurantResponse.ok) {
                     const restaurantData = await restaurantResponse.json();
+                    // Set the min reservation gap hours from restaurant data  
+                    const gapHours = restaurantData.min_reservation_gap_hours || 3;
+                    console.log('Setting min reservation gap hours to:', gapHours);
+                    setMinReservationGapHours(gapHours);
                     // For now, use default hours - we'd need to add hours API endpoint
                     setRestaurantHours({ open: '12:00', close: '23:30' });
                 }
@@ -93,6 +107,35 @@ function TableMap({ restaurantId }) {
             fetchTableData();
         }
     }, [restaurantId, selectedDate]);
+
+    // Convert time string to minutes since midnight for comparison
+    const timeToMinutes = (timeString) => {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        return hours * 60 + minutes;
+    };
+
+    // NEW: Simplified client-side availability calculation
+    const getTableAvailability = (tableId) => {
+        // Find reservation for this specific table
+        const reservation = reservations.find(r => r.table_id === tableId);
+        
+        if (!reservation) {
+            return 'available';
+        }
+
+        // Convert times to minutes for comparison
+        const selectedTimeMinutes = timeToMinutes(selectedTime);
+        const reservationStartMinutes = timeToMinutes(reservation.reservation_time);
+        const gapHours = minReservationGapHours;
+        const reservationEndMinutes = reservationStartMinutes + (gapHours * 60);
+
+        // Check if selected time falls within reservation window
+        if (selectedTimeMinutes >= reservationStartMinutes && selectedTimeMinutes < reservationEndMinutes) {
+            return 'reserved';
+        }
+
+        return 'available';
+    };
 
     const getTableReservation = (tableId, tableName, tableType) => {
         // Get all reservations that could match this table
@@ -138,60 +181,22 @@ function TableMap({ restaurantId }) {
     };
 
     const getTableStatus = (tableId, tableName, tableType) => {
+        // Use the simplified availability check for display
+        const availability = getTableAvailability(tableId);
         const reservation = getTableReservation(tableId, tableName, tableType);
-        if (reservation) {
-            // Use the slider time as reference instead of current time
-            const currentSelectedDate = new Date(selectedDate);
-            const [sliderHours, sliderMinutes] = selectedTime.split(':');
-            const sliderDateTime = new Date(currentSelectedDate);
-            sliderDateTime.setHours(parseInt(sliderHours), parseInt(sliderMinutes), 0, 0);
-            
-            const reservationDate = new Date(reservation.reservation_date);
-            const [hours, minutes] = reservation.reservation_time.split(':');
-            const reservationDateTime = new Date(reservationDate);
-            reservationDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-            
-            // Get restaurant's min gap hours (default to 2)
-            const gapHours = 2; // This could be fetched from restaurant data
-            const reservationEndTime = new Date(reservationDateTime.getTime() + (gapHours * 60 * 60 * 1000));
-            
-            // Check if the slider time is within the reservation window
-            const isActiveAtSliderTime = sliderDateTime >= reservationDateTime && sliderDateTime <= reservationEndTime;
-            
-            // Show the reservation status only if the slider is within the active window
-            if (isActiveAtSliderTime) {
-                // Check if it's a manual occupation (system reservation)
-                let status = 'reserved';
-                if (reservation.reservation_name?.includes('Manual Occupation')) {
-                    status = 'occupied';
-                } else {
-                    status = 'reserved';
-                }
-                
-                return {
-                    status: status,
-                    time: reservation.reservation_time,
-                    guest: reservation.reservation_name,
-                    guests: reservation.guests,
-                    celebration: reservation.celebration_type !== 'none' ? reservation.celebration_type : null,
-                    isActive: true,
-                    endTime: reservationEndTime
-                };
-            } else {
-                // If slider is outside the reservation window, show as available
-                return { 
-                    status: 'available',
-                    hasReservation: true,
-                    time: reservation.reservation_time,
-                    guest: reservation.reservation_name,
-                    guests: reservation.guests,
-                    celebration: reservation.celebration_type !== 'none' ? reservation.celebration_type : null,
-                    isActive: false,
-                    endTime: reservationEndTime
-                };
-            }
+        
+        if (reservation && availability === 'reserved') {
+            return {
+                status: 'reserved',
+                time: reservation.reservation_time,
+                guest: reservation.reservation_name,
+                guests: reservation.guests,
+                celebration: reservation.celebration_type !== 'none' ? reservation.celebration_type : null,
+                isActive: true
+            };
         }
-        return { status: 'available' };
+        
+        return { status: availability };
     };
 
     // Generate time options for slider
@@ -445,7 +450,7 @@ function TableMap({ restaurantId }) {
                     body: JSON.stringify({ 
                         date: selectedDate,
                         time: selectedTime,
-                        duration_hours: 2 // Default duration, can be made configurable
+                        duration_hours: minReservationGapHours // Use restaurant's configured gap hours
                     })
                 });
 
@@ -473,6 +478,16 @@ function TableMap({ restaurantId }) {
             if (tablesResponse.ok) {
                 const tablesData = await tablesResponse.json();
                 setTables(Array.isArray(tablesData) ? tablesData : []);
+            }
+
+            // Also refresh reservations to get the updated data
+            const reservationsResponse = await fetch(`/api/restaurants/${restaurantId}/reservations?date=${selectedDate}`, {
+                headers: getAuthHeaders()
+            });
+            
+            if (reservationsResponse.ok) {
+                const reservationsData = await reservationsResponse.json();
+                setReservations(Array.isArray(reservationsData) ? reservationsData : []);
             }
         } catch (err) {
             console.error('Failed to update table status:', err);
@@ -556,7 +571,10 @@ function TableMap({ restaurantId }) {
                                 min="0"
                                 max={timeOptions.length - 1}
                                 value={timeOptions.indexOf(selectedTime)}
-                                onChange={(e) => setSelectedTime(timeOptions[parseInt(e.target.value)])}
+                                onChange={(e) => {
+                                    setSelectedTime(timeOptions[parseInt(e.target.value)]);
+                                    setForceRefresh(prev => prev + 1);
+                                }}
                                 className="time-slider"
                             />
                             <span className="time-display">{formatTime(selectedTime)}</span>
@@ -651,24 +669,13 @@ function TableMap({ restaurantId }) {
                 className={`unified-table-map ${dragMode ? 'drag-mode' : ''}`}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                key={`map-${selectedTime}-${selectedDate}`}
+                key={`map-${selectedTime}-${selectedDate}-${forceRefresh}`}
             >
                 <div className="table-map-container-inner">
                     {tables.map((table) => {
-                        // Force re-calculation of table status when selectedTime, selectedDate, or reservations change
+                        // Use the simplified availability calculation
                         const tableStatus = getTableStatus(table.table_id, table.table_name, table.table_type);
                         const isEditing = editingTable === table.table_id;
-                        
-                        // Debug: Log table status for first table
-                        if (table.table_id === tables[0]?.table_id) {
-                            console.log(`Table ${table.table_name} at ${selectedTime}:`, {
-                                status: tableStatus.status,
-                                isActive: tableStatus.isActive,
-                                hasReservation: tableStatus.hasReservation,
-                                guest: tableStatus.guest,
-                                selectedTime: selectedTime
-                            });
-                        }
                         
                         // Get table type class for border distinction
                         const getTableTypeClass = (type) => {
@@ -682,7 +689,7 @@ function TableMap({ restaurantId }) {
                         
                         return (
                             <div
-                                key={`${table.table_id}-${selectedTime}-${selectedDate}`}
+                                key={`${table.table_id}-${selectedTime}-${selectedDate}-${forceRefresh}`}
                                 className={`table-item ${tableStatus.status} ${getTableTypeClass(table.table_type)} ${tableStatus.celebration ? 'celebration' : ''} ${isEditing ? 'editing' : ''} ${dragMode ? 'draggable' : ''} ${statusMode ? 'status-mode' : ''} ${isDragging && draggedTable?.table_id === table.table_id ? 'dragging' : ''} ${tableStatus.isActive ? 'active-reservation' : ''}`}
                                 style={{
                                     position: 'absolute',

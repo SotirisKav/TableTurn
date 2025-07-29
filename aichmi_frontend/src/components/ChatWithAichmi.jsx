@@ -28,13 +28,17 @@ function parseStructuredText(text) {
             }
         }
 
-        // Check if it's a menu (contains prices and food items)
-        if (text.includes('€') && (text.includes('APPETIZERS') || text.includes('DESSERT') || text.includes('menu') || text.match(/\*\*[^*]+\*\*/))) {
+        // Check if it's a menu (contains prices and food items, but NOT celebration services)
+        const isCelebrationOffer = text.includes('celebration') || text.includes('flowers') || text.includes('cake') || text.includes('champagne') || text.includes('nameday') || text.includes('anniversary');
+        if (text.includes('€') && !isCelebrationOffer && (text.includes('APPETIZER') || text.includes('DESSERT') || text.includes('MAIN') || text.includes('SEAFOOD') || text.includes('WINE') || text.includes('SALAD') || text.includes('menu') || text.match(/\*\*[^*]+\*\*/))) {
             return parseMenu(text);
         }
 
         // Check if it's a list (contains bullet points or numbers)
-        if (text.includes('•') || /^\d+\./.test(text.trim()) || text.includes('- ')) {
+        // Skip list parsing for table availability responses that should remain as plain text
+        if ((text.includes('•') || /^\d+\./.test(text.trim()) || text.includes('- ')) &&
+            !text.includes('Which type of table would you prefer') &&
+            !text.includes('Great news! We have tables available')) {
             return parseList(text);
         }
 
@@ -50,7 +54,7 @@ function parseMenu(text) {
     const sections = [];
     
     // First, try to split by categories (look for common menu category patterns)
-    const categoryPatterns = /\*\*\*([A-Z\s]+)\*\*\*|\*([A-Z\s]{5,})\*|([A-Z\s]{5,}):/g;
+    const categoryPatterns = /\*\*([A-Z\s]+):\*\*|\*\*([A-Z\s]{3,})\*\*|([A-Z\s]{5,}):/g;
     let lastIndex = 0;
     const parts = [];
     let match;
@@ -65,7 +69,7 @@ function parseMenu(text) {
         }
         
         // Add the category header
-        const categoryName = (match[1] || match[2] || match[3] || '').trim().replace(/\*/g, '');
+        const categoryName = (match[1] || match[2] || match[3] || '').trim().replace(/\*|:/g, '');
         if (categoryName) {
             parts.push({ type: 'category', name: categoryName });
         }
@@ -107,20 +111,49 @@ function parseMenu(text) {
         sections.push(currentSection);
     }
     
-    return { type: 'menu', sections: sections.length > 0 ? sections : [{ type: 'section', title: 'Menu Items', items: parseMenuItems(text) }] };
+    // Check if there's additional text after the menu (like continuation messages)
+    // Look for text that comes after the last menu item or dietary information
+    const lines = text.split('\n');
+    let additionalText = '';
+    let foundEndOfMenu = false;
+    
+    // Find lines that come after menu items but don't look like menu content
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        
+        // Skip empty lines
+        if (!line) continue;
+        
+        // If we find a line with price or menu formatting, we've found the end of menu
+        if (line.includes('€') || line.match(/^\*\*[A-Z\s]+\*\*:?$/)) {
+            foundEndOfMenu = true;
+            break;
+        }
+        
+        // If we haven't found menu content yet, this might be additional text
+        if (!foundEndOfMenu && !line.match(/^\*\*/) && !line.includes('€')) {
+            additionalText = line + (additionalText ? '\n' + additionalText : '');
+        }
+    }
+    
+    return { 
+        type: 'menu', 
+        sections: sections.length > 0 ? sections : [{ type: 'section', title: 'Menu Items', items: parseMenuItems(text) }],
+        additionalText: additionalText
+    };
 }
 
 function parseMenuItems(text) {
     const items = [];
     
-    // Look for patterns like **Name** description (dietary info) price
-    const itemPattern = /\*\*([^*]+)\*\*([^€]*?)€(\d+(?:\.\d{2})?)/g;
+    // Look for patterns like **Name**: €price (dietary info), with optional bullet point prefix
+    const itemPattern = /(?:\*\s+)?\*\*([^*]+)\*\*:\s*€(\d+(?:\.\d{2})?)\s*([^€\n]*)/g;
     let match;
     
     while ((match = itemPattern.exec(text)) !== null) {
         const name = match[1].trim();
-        const descriptionPart = match[2].trim();
-        const price = '€' + match[3];
+        const price = '€' + match[2];
+        const descriptionPart = match[3].trim();
         
         // Extract dietary information
         const dietaryInfo = [];
@@ -160,7 +193,7 @@ function parseMenuItems(text) {
             const priceMatch = line.match(/€(\d+(?:\.\d{2})?)/);
             if (priceMatch) {
                 const price = priceMatch[0];
-                let itemName = line.replace(/€\d+(?:\.\d{2})?/, '').replace(/\*+/g, '').trim();
+                let itemName = line.replace(/€\d+(?:\.\d{2})?/, '').replace(/\*+/g, '').replace(/^[\*\s•-]+/, '').trim();
                 
                 // Extract dietary info from simple format
                 const dietaryInfo = [];
@@ -172,7 +205,8 @@ function parseMenuItems(text) {
                     itemName = itemName.replace(dietaryMatch[0], '').trim();
                 }
                 
-                itemName = itemName.replace(/\s+/g, ' ').trim();
+                // Clean up any remaining formatting
+                itemName = itemName.replace(/[:]+$/, '').replace(/\s+/g, ' ').trim();
                 
                 if (itemName) {
                     items.push({
@@ -281,6 +315,11 @@ function AnimatedText({ text, delay = 0 }) {
                                 </div>
                             </div>
                         ))}
+                        {content.additionalText && (
+                            <div className="menu-additional-text" style={{marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f0f9ff', borderRadius: '8px', color: '#19547b', fontWeight: '500'}}>
+                                {content.additionalText}
+                            </div>
+                        )}
                     </div>
                 );
             case 'reservation':
@@ -312,7 +351,10 @@ function AnimatedText({ text, delay = 0 }) {
                 );
             case 'paragraph':
             default:
-                return <div>{content.content || content}</div>;
+                const textContent = content.content || content;
+                // Process markdown bold text
+                const processedText = textContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                return <div dangerouslySetInnerHTML={{ __html: processedText }}></div>;
         }
     };
 

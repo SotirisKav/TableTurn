@@ -36,7 +36,6 @@ class MenuPricingAgent extends BaseAgent {
                 // Add restaurant_id to filters to ensure we only get results from this restaurant
                 const searchFilters = { 
                     restaurant_id: restaurantId, 
-                    available: true,
                     ...dietaryFilters 
                 };
                 
@@ -81,17 +80,23 @@ class MenuPricingAgent extends BaseAgent {
                 };
             }
             
-            // Build system prompt
-            const systemPrompt = this.buildSystemPrompt(menuData);
+            // Build system prompt - check for ongoing reservation context
+            const systemPrompt = this.buildSystemPrompt(menuData, context);
             
             // Build conversation context
             const conversationHistory = this.buildConversationHistory(history);
             
             // Create full prompt
-            const fullPrompt = this.buildPrompt(message, conversationHistory, menuData);
+            const fullPrompt = this.buildPrompt(message, conversationHistory, menuData, context);
             
             // Generate response with RAG context
             const aiResponse = await this.generateResponse(fullPrompt, systemPrompt, ragData);
+            
+            // Check if there's an ongoing reservation that was interrupted
+            if (this.hasOngoingReservation(context, history)) {
+                const enhancedResponse = this.enhanceResponseWithReservationPrompt(aiResponse);
+                return this.formatResponse(enhancedResponse);
+            }
             
             // Check if user wants to make a reservation (suggest handoff)
             if (this.shouldHandoffToReservation(message)) {
@@ -160,7 +165,7 @@ class MenuPricingAgent extends BaseAgent {
         return categories;
     }
 
-    buildSystemPrompt(menuData) {
+    buildSystemPrompt(menuData, context = {}) {
         const { restaurant, menuItems, hybridResults, hasHybridMatch } = menuData;
         
         const vegetarianCount = menuItems?.filter(item => item.is_vegetarian).length || 0;
@@ -174,33 +179,35 @@ class MenuPricingAgent extends BaseAgent {
             return acc;
         }, {}) || {};
         
-        // Format menu items by category
+        // Format menu items by category using **bold** format for frontend parsing
         const formattedMenu = Object.entries(menuByCategory)
             .map(([category, items]) => {
                 const categoryItems = items.map(item => 
-                    `- ${item.name}: €${item.price} ${this.formatDietaryInfo(item)}`
+                    `**${item.name}**: €${item.price} ${this.formatDietaryInfo(item)}`
                 ).join('\n');
-                return `${category.toUpperCase()}:\n${categoryItems}`;
+                return `**${category.toUpperCase()}:**\n${categoryItems}`;
             }).join('\n\n');
         
         return `You are AICHMI, a concise menu assistant for ${restaurant.name}.
 
-${hasHybridMatch ? `RECOMMENDED DISHES:
+${hasHybridMatch ? `**RECOMMENDED DISHES:**
 ${hybridResults.slice(0,5).map(item => 
-    `- ${item.name}: €${item.price} ${this.formatDietaryInfo(item)}`
+    `**${item.name}**: €${item.price} ${this.formatDietaryInfo(item)}`
 ).join('\n')}
 
-` : ''}COMPLETE MENU:
+` : ''}**COMPLETE MENU:**
 ${formattedMenu}
 
 DIETARY OPTIONS: ${vegetarianCount} vegetarian, ${veganCount} vegan, ${glutenFreeCount} gluten-free
 
 GUIDELINES:
-- Be brief and helpful about menu items
-- Use: 🌱 Vegetarian, 🌿 Vegan, 🌾 Gluten-free
-- Include prices when mentioning dishes
-- Always show items from the COMPLETE MENU above, never make up items
-- Focus on what the user asked for`;
+• Be brief and helpful about menu items
+• Use: 🌱 Vegetarian, 🌿 Vegan, 🌾 Gluten-free  
+• Include prices when mentioning dishes
+• Always show items from the COMPLETE MENU above, never make up items
+• Focus on what the user asked for
+• IMPORTANT: When displaying menu items, use the exact format provided above with **Item Name**: €Price (dietary info)
+• DO NOT add bullet points (*) before menu items - use the ** format only`;
     }
 
     formatDietaryInfo(item) {
@@ -212,7 +219,7 @@ GUIDELINES:
         return dietary.length > 0 ? `(${dietary.join(', ')})` : '';
     }
 
-    buildPrompt(message, conversationHistory, menuData) {
+    buildPrompt(message, conversationHistory, menuData, context = {}) {
         let prompt = '';
         
         if (conversationHistory) {
@@ -285,6 +292,49 @@ Please help the guest with menu information for ${menuData.restaurant.name}. Pro
         
         const msg = message.toLowerCase();
         return specificQueries.some(query => msg.includes(query));
+    }
+
+    /**
+     * Check if there's an ongoing reservation in progress that was interrupted
+     */
+    hasOngoingReservation(context, history = []) {
+        // Check if we're in multi-agent mode and have orchestrator context
+        if (context?.orchestrator?.conversationState) {
+            const state = context.orchestrator.conversationState;
+            if (state.context?.bookingInProgress || state.interruptedContext?.bookingData?.bookingInProgress) {
+                return true;
+            }
+        }
+        
+        // Check direct context
+        if (context?.bookingInProgress) {
+            return true;
+        }
+        
+        // Fallback: Check conversation history to detect ongoing reservation
+        // Look for recent AI messages asking for reservation details
+        const recentAIMessages = history.slice(-5).filter(msg => msg.sender === 'ai');
+        const reservationKeywords = [
+            'name, phone number, and email',
+            'contact information',
+            'name and phone',
+            'Which type of table would you prefer',
+            'available for July',
+            'checking for availability'
+        ];
+        
+        return recentAIMessages.some(msg => 
+            reservationKeywords.some(keyword => 
+                msg.text?.includes(keyword)
+            )
+        );
+    }
+
+    /**
+     * Enhance menu response with a prompt to continue reservation if there's one in progress
+     */
+    enhanceResponseWithReservationPrompt(aiResponse) {
+        return `${aiResponse}\n\nWould you like to continue with your reservation?`;
     }
 
 }

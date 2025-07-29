@@ -7,7 +7,7 @@ import RestaurantInfoAgent from './RestaurantInfoAgent.js';
 import ReservationAgent from './ReservationAgent.js';
 import TableAvailabilityAgent from './TableAvailabilityAgent.js';
 import MenuPricingAgent from './MenuPricingAgent.js';
-import LocationTransferAgent from './LocationTransferAgent.js';
+
 import CelebrationAgent from './CelebrationAgent.js';
 import SupportContactAgent from './SupportContactAgent.js';
 import db from '../../config/database.js';
@@ -19,7 +19,7 @@ class AgentOrchestrator {
             availability: new TableAvailabilityAgent(),
             reservation: new ReservationAgent(),
             menu: new MenuPricingAgent(),
-            location: new LocationTransferAgent(),
+
             celebration: new CelebrationAgent(),
             support: new SupportContactAgent()
         };
@@ -37,13 +37,23 @@ class AgentOrchestrator {
     /**
      * Main entry point for processing user messages
      */
-    async processMessage(message, history, restaurantId) {
+    async processMessage(message, history = [], restaurantId = null) {
         try {
             console.log('🎭 Agent Orchestrator processing:', message);
             
-            // Reset delegation chain for new messages
-            this.conversationState.delegationChain = [];
-            this.conversationState.finalResponse = null;
+            // ENHANCED: Check if user wants to resume interrupted context
+            if (this.conversationState.interruptedContext && this.checkResumeInterrupted(message)) {
+                this.resumeInterruptedContext();
+                console.log('🔄 Resumed interrupted context, continuing with reservation flow');
+                
+                // Continue with reservation agent
+                const reservationAgent = this.agents.reservation;
+                return await reservationAgent.processMessage(message, history, restaurantId, {
+                    isMultiAgent: false,
+                    orchestrator: this,
+                    conversationState: this.conversationState
+                });
+            }
             
             // Check if this is a complex query requiring multi-agent coordination
             const requiresMultiAgent = this.detectMultiAgentQuery(message);
@@ -59,11 +69,12 @@ class AgentOrchestrator {
         } catch (error) {
             console.error('❌ Agent Orchestrator error:', error);
             return {
+                response: "I apologize, but I'm having trouble processing your request right now. Please try again.",
                 type: 'message',
-                response: 'I apologize, but I encountered an issue. Please try again or contact our support team.',
-                timestamp: new Date().toISOString(),
-                agent: 'orchestrator',
-                error: true
+                orchestrator: {
+                    agent: 'orchestrator',
+                    error: error.message
+                }
             };
         }
     }
@@ -101,29 +112,56 @@ class AgentOrchestrator {
     async handleMultiAgentWorkflow(message, history, restaurantId) {
         console.log('🔄 Starting multi-agent workflow');
         
+        // ENHANCED: Check if this is an interruption/context switch during ongoing conversation
+        const isContextSwitch = this.conversationState.activeAgent && 
+                               this.conversationState.activeAgent !== 'orchestrator';
+        
+        if (isContextSwitch) {
+            console.log(`🔄 Context switch detected from ${this.conversationState.activeAgent}`);
+            // Store interrupted context before resetting
+            this.handleConversationInterrupt(message, await this.analyzeIntent(message, history), history);
+        }
+        
         // Start with the primary agent based on intent
         const primaryIntent = await this.analyzeIntent(message, history);
         const primaryAgent = this.selectAgent(primaryIntent);
         
         console.log(`🎯 Primary agent: ${primaryAgent.name} (intent: ${primaryIntent})`);
         
-        // Track delegation chain
-        this.conversationState.delegationChain.push({
+        // Initialize delegation chain
+        this.conversationState.delegationChain = [{
             agent: primaryAgent.name,
             intent: primaryIntent,
+            message: message,
             timestamp: new Date().toISOString()
-        });
+        }];
         
         // Process with primary agent
         let currentResponse = await primaryAgent.processMessage(
-            message,
-            history,
+            message, 
+            history, 
             restaurantId,
-            this.conversationState.context
+            { 
+                isMultiAgent: true,
+                orchestrator: this,
+                conversationState: this.conversationState,
+                ...this.conversationState.context // Include current context
+            }
         );
         
-        // Handle delegation workflow
-        return await this.processDelegationChain(currentResponse, message, history, restaurantId);
+        // ENHANCED: Immediate response for simple queries (no delegation needed)
+        if (!currentResponse.delegateTo && !currentResponse.needsMoreInfo) {
+            console.log(`✅ ${primaryAgent.name} handled query completely, no delegation needed`);
+            return this.consolidateMultiAgentResponse(currentResponse, message);
+        }
+        
+        // Process delegation chain if needed
+        if (currentResponse.delegateTo || currentResponse.needsMoreInfo) {
+            currentResponse = await this.processDelegationChain(currentResponse, message, history, restaurantId);
+        }
+        
+        // Consolidate multi-agent response
+        return this.consolidateMultiAgentResponse(currentResponse, message);
     }
 
     /**
@@ -188,7 +226,39 @@ class AgentOrchestrator {
             // Check if we're in an ongoing reservation flow
             const isReservationFlow = this.conversationState.context.bookingInProgress;
             
-            // Use AI to analyze intent with context
+            // ENHANCED: Immediate intent detection for context switches
+            const immediateIntents = {
+                support: ['owner info', 'owner information', 'contact info', 'contact information', 
+                         'who owns', 'restaurant owner', 'manager info', 'phone number', 'email',
+                         'contact details', 'owner details', 'manager contact'],
+                menu: ['menu', 'food', 'dishes', 'what do you serve', 'prices', 'cost',
+                       'vegetarian', 'vegan', 'gluten free', 'dessert', 'appetizer'],
+                location: ['transfer', 'airport', 'pickup', 'transportation', 'hotel',
+                          'directions', 'address', 'how to get there', 'taxi'],
+                celebration: ['celebration', 'birthday', 'anniversary', 'romantic', 'special occasion',
+                             'cake', 'flowers', 'surprise']
+            };
+            
+            const msg = message.toLowerCase();
+            
+            // Check for immediate intent matches (highest priority)
+            for (const [intent, keywords] of Object.entries(immediateIntents)) {
+                if (keywords.some(keyword => msg.includes(keyword))) {
+                    console.log(`🎯 Immediate intent detected: ${intent} for "${message}"`);
+                    return intent;
+                }
+            }
+            
+            // CRITICAL FIX: Route availability queries with specific booking details to TableAvailabilityAgent
+            const hasSpecificBookingDetails = /(\\d+\\s*(pm|am)|friday|saturday|sunday|monday|tuesday|wednesday|thursday|tomorrow|today|\\d+\\s*(people|person|guests))/i.test(message);
+            const isAvailabilityQuery = msg.includes('available') || msg.includes('do you have') || msg.includes('table for');
+            
+            if (isAvailabilityQuery && hasSpecificBookingDetails) {
+                console.log('🔄 Availability query with specific details → routing to availability agent');
+                return 'availability';
+            }
+            
+            // Use AI to analyze intent with context for complex cases
             const { askGemini } = await import('../AIService.js');
             
             const intentPrompt = `Analyze the user's intent from this message in the context of a restaurant reservation system.
@@ -200,13 +270,19 @@ Current message: "${message}"
 
 Is this part of an ongoing reservation? ${isReservationFlow ? 'Yes' : 'No'}
 
+IMPORTANT ROUTING RULES:
+- If asking about availability WITH specific details (date/time/party size) → "availability" 
+- If continuing an existing booking process → "reservation"
+- If asking general questions about tables/capacity → "availability"
+- If providing contact info or confirming booking → "reservation"
+
 Based on the message and context, determine the PRIMARY intent from these options:
-- reservation: Making, confirming, or continuing a booking
-- availability: Checking table availability or capacity
+- availability: Checking if tables are available, asking about capacity, or initial availability queries
+- reservation: Continuing a booking process, providing contact info, or finalizing reservations  
 - menu: Asking about food, drinks, prices, dietary options
 - celebration: Special occasions, birthdays, anniversaries, romantic dining
 - location: Address, directions, transfers, hotels
-- support: Contact info, complaints, help requests
+- support: Contact info, complaints, help requests, owner information
 - restaurant: General info, hours, atmosphere, reviews
 
 Respond with just the intent name (one word).`;
@@ -225,12 +301,16 @@ Respond with just the intent name (one word).`;
                 console.log(`🤖 AI intent analysis returned unexpected result: ${detectedIntent}, using fallback`);
                 
                 // Smart fallback based on context
-                if (isReservationFlow) {
+                if (isReservationFlow && !msg.includes('owner') && !msg.includes('menu') && !msg.includes('contact')) {
                     return 'reservation';
-                } else if (message.toLowerCase().includes('book') || message.toLowerCase().includes('reserve')) {
-                    return 'reservation';
-                } else if (message.toLowerCase().includes('menu') || message.toLowerCase().includes('food')) {
+                } else if (msg.includes('available') || msg.includes('do you have') || msg.includes('table for')) {
+                    return 'availability';
+                } else if (msg.includes('book') || msg.includes('reserve')) {
+                    return 'availability'; // Route booking requests to availability first
+                } else if (msg.includes('menu') || msg.includes('food')) {
                     return 'menu';
+                } else if (msg.includes('owner') || msg.includes('contact')) {
+                    return 'support';
                 } else {
                     return 'restaurant';
                 }
@@ -241,12 +321,19 @@ Respond with just the intent name (one word).`;
             
             // Fallback to simple logic
             const msg = message.toLowerCase();
-            if (this.conversationState.context.bookingInProgress) {
-                return 'reservation';
-            } else if (msg.includes('book') || msg.includes('reserve')) {
-                return 'reservation';
+            
+            // Enhanced fallback with proper availability routing
+            if (msg.includes('owner') || msg.includes('contact')) {
+                return 'support';
             } else if (msg.includes('menu') || msg.includes('food')) {
                 return 'menu';
+            } else if (msg.includes('available') || msg.includes('do you have') || msg.includes('table for')) {
+                return 'availability';
+            } else if (this.conversationState.context.bookingInProgress && 
+                      !msg.includes('owner') && !msg.includes('menu')) {
+                return 'reservation';
+            } else if (msg.includes('book') || msg.includes('reserve')) {
+                return 'availability'; // Route booking requests to availability first
             } else {
                 return 'restaurant';
             }
@@ -352,11 +439,26 @@ Respond with just the intent name (one word).`;
         
         // Don't trigger multi-agent for simple responses in ongoing conversations
         const isSimpleResponse = msg.trim().length <= 15 && !msg.includes(' ');
-        const isNumericResponse = /^\d+$/.test(msg.trim());
+        const isNumericResponse = /^\\d+$/.test(msg.trim());
         const isTableType = ['standard', 'grass', 'anniversary'].includes(msg.trim());
         
         if (isSimpleResponse || isNumericResponse || isTableType) {
             return false;
+        }
+        
+        // ENHANCED: Check for immediate context switching keywords
+        const immediateSwitch = [
+            'owner info', 'owner information', 'contact info', 'contact information',
+            'who owns', 'restaurant owner', 'manager info', 'phone number', 'email',
+            'menu', 'food', 'dishes', 'what do you serve', 'prices',
+            'transfer', 'airport', 'pickup', 'transportation', 'hotel',
+            'celebration', 'birthday', 'anniversary', 'romantic', 'special occasion'
+        ];
+        
+        const hasImmediateSwitch = immediateSwitch.some(keyword => msg.includes(keyword));
+        if (hasImmediateSwitch) {
+            console.log(`🔄 Immediate context switch detected: "${msg}"`);
+            return true; // Always trigger multi-agent for context switches
         }
         
         // Check for compound queries (contains 'and', 'also', etc.)
@@ -370,7 +472,8 @@ Respond with just the intent name (one word).`;
             datetime: ['date', 'time', 'friday', 'tomorrow', 'today', 'day', 'what day', 'when'],
             menu: ['menu', 'dish', 'food', 'gluten', 'vegetarian', 'main course'],
             celebration: ['romantic', 'birthday', 'anniversary', 'special'],
-            location: ['transfer', 'hotel', 'pickup', 'airport']
+            location: ['transfer', 'hotel', 'pickup', 'airport'],
+            support: ['owner', 'contact', 'phone', 'email', 'manager', 'help']
         };
         
         let domainMatches = 0;
@@ -485,6 +588,16 @@ Respond with just the intent name (one word).`;
      * Coordinate response and handle agent handoffs
      */
     async coordinateResponse(response, intent, agent, restaurantId, originalHistory = []) {
+        // Update conversation state with any context returned by the agent
+        if (response.data?.reservationContext) {
+            console.log('📋 Updating orchestrator context with reservation data');
+            this.conversationState.context = {
+                ...this.conversationState.context,
+                reservationContext: response.data.reservationContext,
+                bookingInProgress: true
+            };
+        }
+
         // Check if agent suggests handoff to another agent
         if (response.handoff) {
             console.log(`🔄 Agent handoff: ${agent.name} → ${response.handoff.agent}`);
@@ -557,6 +670,87 @@ Respond with just the intent name (one word).`;
             context: {},
             reservationProgress: {}
         };
+    }
+
+    /**
+     * Handle conversation interruptions and context switches
+     */
+    handleConversationInterrupt(message, newIntent, history) {
+        const currentAgent = this.conversationState.activeAgent;
+        
+        console.log(`🔄 Conversation interrupt: switching from ${currentAgent} to ${newIntent}`);
+        
+        // Store the interrupted context for potential resumption
+        if (this.conversationState.context.bookingInProgress) {
+            this.conversationState.interruptedContext = {
+                agent: currentAgent,
+                bookingData: { ...this.conversationState.context },
+                timestamp: new Date().toISOString(),
+                lastMessage: history[history.length - 1]?.text || ''
+            };
+            
+            console.log('💾 Stored interrupted booking context for potential resumption');
+        }
+        
+        // Reset current state but keep interrupted context
+        const interruptedContext = this.conversationState.interruptedContext;
+        this.resetConversationState();
+        this.conversationState.interruptedContext = interruptedContext;
+        
+        return true;
+    }
+
+    /**
+     * Check if user wants to resume interrupted context
+     */
+    checkResumeInterrupted(message) {
+        const msg = message.toLowerCase().trim();
+        
+        // Explicit resume keywords
+        const resumeKeywords = [
+            'back to booking', 'continue reservation', 'resume booking',
+            'go back', 'continue with', 'back to reservation'
+        ];
+        
+        // Simple affirmative responses that indicate wanting to continue
+        const affirmativeResponses = [
+            'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'yes please',
+            'yes the reservation', 'the reservation', 'continue', 'proceed'
+        ];
+        
+        // Check if this is likely a continuation request
+        const isAffirmative = affirmativeResponses.some(response => {
+            if (response === 'yes' || response === 'yeah' || response === 'yep' || response === 'sure' || response === 'ok' || response === 'okay') {
+                return msg === response;
+            }
+            return msg.includes(response);
+        });
+        
+        const hasResumeKeyword = resumeKeywords.some(keyword => msg.includes(keyword));
+        
+        return hasResumeKeyword || isAffirmative;
+    }
+
+    /**
+     * Resume interrupted conversation context
+     */
+    resumeInterruptedContext() {
+        if (!this.conversationState.interruptedContext) {
+            return false;
+        }
+        
+        console.log('🔄 Resuming interrupted booking context');
+        
+        // Restore the interrupted context
+        this.conversationState.context = {
+            ...this.conversationState.interruptedContext.bookingData
+        };
+        this.conversationState.activeAgent = this.conversationState.interruptedContext.agent;
+        
+        // Clear the interrupted context
+        this.conversationState.interruptedContext = null;
+        
+        return true;
     }
 
     /**

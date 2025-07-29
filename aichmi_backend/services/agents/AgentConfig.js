@@ -30,7 +30,6 @@ export const AGENT_CONFIG = {
             capabilities: ['reservation', 'booking', 'table', 'available', 'date', 'time'],
             handoffRules: {
                 'celebration': ['birthday', 'anniversary', 'celebration', 'special', 'cake', 'flowers'],
-                'location': ['transfer', 'pickup', 'transport'],
                 'menu': ['what food', 'menu', 'dishes']
             }
         },
@@ -45,15 +44,7 @@ export const AGENT_CONFIG = {
             }
         },
         
-        location: {
-            name: 'LocationTransferAgent',
-            priority: 2,
-            capabilities: ['location', 'address', 'transfer', 'transport', 'directions', 'pickup'],
-            handoffRules: {
-                'reservation': ['book', 'reserve', 'table'],
-                'restaurant': ['about restaurant', 'hours', 'info']
-            }
-        },
+
         
         celebration: {
             name: 'CelebrationAgent',
@@ -102,14 +93,6 @@ export const AGENT_CONFIG = {
             weight: 2.2
         },
         
-        location: {
-            keywords: [
-                'location', 'address', 'transfer', 'transport', 'pickup',
-                'airport', 'hotel', 'directions', 'how to get', 'where',
-                'taxi', 'bus', 'car'
-            ],
-            weight: 1.5
-        },
         
         restaurant: {
             keywords: [

@@ -65,11 +65,10 @@ class CelebrationAgent extends BaseAgent {
             
             // Note: Add-on pricing would typically come from a separate table
             // For now, we'll use standard pricing structure
+            // Only include add-ons that are supported by the database schema
             const addOnPricing = {
                 cake: { price: 25, description: 'Beautiful celebration cake with personalized message' },
-                flowers: { price: 15, description: 'Fresh flower arrangement for your table' },
-                champagne: { price: 35, description: 'Bottle of champagne for toasting' },
-                decorations: { price: 20, description: 'Table decorations for special occasions' }
+                flowers: { price: 15, description: 'Fresh flower arrangement for your table' }
             };
             
             return {
@@ -104,7 +103,7 @@ ${celebrationTypes.map(type => `- ${type}`).join('\n')}
 
 ADD-ON SERVICES & PRICING:
 ${Object.entries(addOnPricing).map(([service, details]) => 
-    `- ${service.charAt(0).toUpperCase() + service.slice(1)}: ${details.price}€
+    `- ${service.charAt(0).toUpperCase() + service.slice(1)}: €${details.price}
   ${details.description}`
 ).join('\n')}
 
@@ -194,8 +193,6 @@ Please help the guest plan their special celebration at ${celebrationData.restau
         // Extract add-on preferences
         if (msg.includes('cake')) details.cake = true;
         if (msg.includes('flower')) details.flowers = true;
-        if (msg.includes('champagne')) details.champagne = true;
-        if (msg.includes('decoration')) details.decorations = true;
         
         return details;
     }
