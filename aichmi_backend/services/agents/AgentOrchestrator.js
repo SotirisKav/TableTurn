@@ -83,47 +83,103 @@ class AgentOrchestrator {
      * Handle single agent workflow (original behavior)
      */
     async handleSingleAgentWorkflow(message, history, restaurantId) {
-        // Analyze intent and determine which agent should handle the request
-        const intent = await this.analyzeIntent(message, history);
-        console.log('🎯 Detected intent:', intent);
-        
-        // Get the appropriate agent
-        const agent = this.selectAgent(intent);
-        console.log('🤖 Selected agent:', agent.name);
-        
-        // Update conversation state
-        this.updateConversationState(intent, agent, message);
-        
-        // Process the message with the selected agent
-        const response = await agent.processMessage(
-            message, 
-            history, 
-            restaurantId, 
-            this.conversationState.context
-        );
-        
-        // Post-process response and handle agent coordination
-        return await this.coordinateResponse(response, intent, agent, restaurantId, history);
+        try {
+            // Ensure restaurantId has a default value
+            const effectiveRestaurantId = restaurantId || 1;
+            console.log(`🏪 Using restaurant ID: ${effectiveRestaurantId} (original: ${restaurantId})`);
+            
+            // Analyze intent and determine which agent should handle the request
+            const intent = await this.determineNextAgent(message, history, effectiveRestaurantId);
+            console.log('🎯 Detected intent:', intent);
+            
+            // Get the appropriate agent
+            const agent = this.selectAgent(intent);
+            console.log('🤖 Selected agent:', agent.name);
+            
+            // Update conversation state
+            this.updateConversationState(intent, agent, message);
+            
+            // Process the message with the selected agent
+            const response = await agent.processMessage(
+                message, 
+                history, 
+                effectiveRestaurantId, 
+                this.conversationState.context
+            );
+            
+            // Post-process response and handle agent coordination
+            return await this.coordinateResponse(response, intent, agent, effectiveRestaurantId, history);
+            
+        } catch (error) {
+            console.error('❌ Single agent workflow error:', error);
+            
+            // Intelligent fallback: try with reservation agent if other agents fail
+            try {
+                console.log('🔄 Falling back to reservation agent');
+                const reservationAgent = this.agents.reservation;
+                
+                const fallbackResponse = await reservationAgent.processMessage(
+                    message, 
+                    history, 
+                    effectiveRestaurantId, 
+                    { 
+                        isMultiAgent: false,
+                        orchestrator: this,
+                        conversationState: this.conversationState,
+                        fallbackMode: true 
+                    }
+                );
+                
+                return {
+                    ...fallbackResponse,
+                    orchestrator: {
+                        agent: 'reservation',
+                        intent: 'reservation',
+                        fallback: true,
+                        originalError: error.message
+                    }
+                };
+                
+            } catch (fallbackError) {
+                console.error('❌ Fallback also failed:', fallbackError);
+                
+                // Final fallback: simple response
+                return {
+                    response: "I apologize, but I'm having trouble processing your request. Could you please rephrase your question about the restaurant or reservation?",
+                    type: 'message',
+                    orchestrator: {
+                        agent: 'orchestrator',
+                        error: error.message,
+                        fallbackError: fallbackError.message
+                    }
+                };
+            }
+        }
     }
 
     /**
      * Handle multi-agent workflow with delegation
      */
     async handleMultiAgentWorkflow(message, history, restaurantId) {
-        console.log('🔄 Starting multi-agent workflow');
-        
-        // ENHANCED: Check if this is an interruption/context switch during ongoing conversation
-        const isContextSwitch = this.conversationState.activeAgent && 
+        try {
+            console.log('🔄 Starting multi-agent workflow');
+            
+            // Ensure restaurantId has a default value
+            const effectiveRestaurantId = restaurantId || 1;
+            console.log(`🏪 Using restaurant ID: ${effectiveRestaurantId} (original: ${restaurantId})`);
+            
+            // ENHANCED: Check if this is an interruption/context switch during ongoing conversation
+            const isContextSwitch = this.conversationState.activeAgent && 
                                this.conversationState.activeAgent !== 'orchestrator';
         
         if (isContextSwitch) {
             console.log(`🔄 Context switch detected from ${this.conversationState.activeAgent}`);
             // Store interrupted context before resetting
-            this.handleConversationInterrupt(message, await this.analyzeIntent(message, history), history);
+            this.handleConversationInterrupt(message, await this.determineNextAgent(message, history, restaurantId), history);
         }
         
-        // Start with the primary agent based on intent
-        const primaryIntent = await this.analyzeIntent(message, history);
+        // Start with the primary agent based on intent using new routing system
+        const primaryIntent = await this.determineNextAgent(message, history, restaurantId);
         const primaryAgent = this.selectAgent(primaryIntent);
         
         console.log(`🎯 Primary agent: ${primaryAgent.name} (intent: ${primaryIntent})`);
@@ -157,11 +213,56 @@ class AgentOrchestrator {
         
         // Process delegation chain if needed
         if (currentResponse.delegateTo || currentResponse.needsMoreInfo) {
-            currentResponse = await this.processDelegationChain(currentResponse, message, history, restaurantId);
+            currentResponse = await this.processDelegationChain(currentResponse, message, history, effectiveRestaurantId);
         }
         
         // Consolidate multi-agent response
         return this.consolidateMultiAgentResponse(currentResponse, message);
+        
+        } catch (error) {
+            console.error('❌ Multi-agent workflow error:', error);
+            
+            // Intelligent fallback: try single-agent workflow
+            try {
+                console.log('🔄 Falling back to single-agent workflow');
+                return await this.handleSingleAgentWorkflow(message, history, effectiveRestaurantId);
+                
+            } catch (fallbackError) {
+                console.error('❌ Multi-agent fallback also failed:', fallbackError);
+                
+                // Final fallback: direct reservation agent
+                try {
+                    const reservationAgent = this.agents.reservation;
+                    const finalFallback = await reservationAgent.processMessage(message, history, effectiveRestaurantId, {
+                        isMultiAgent: false,
+                        fallbackMode: true,
+                        error: error.message
+                    });
+                    
+                    return {
+                        ...finalFallback,
+                        orchestrator: {
+                            agent: 'reservation',
+                            multiAgentFallback: true,
+                            originalError: error.message
+                        }
+                    };
+                    
+                } catch (finalError) {
+                    console.error('❌ All fallbacks failed:', finalError);
+                    
+                    return {
+                        response: "I apologize, but I'm experiencing technical difficulties. Could you please try asking about your reservation again?",
+                        type: 'message',
+                        orchestrator: {
+                            agent: 'orchestrator',
+                            allFallbacksFailed: true,
+                            error: error.message
+                        }
+                    };
+                }
+            }
+        }
     }
 
     /**
@@ -216,128 +317,295 @@ class AgentOrchestrator {
     }
 
     /**
-     * Analyze user intent using AI logic instead of keywords
+     * FLAWLESS AI-FIRST ROUTING SYSTEM
+     * Main entry point for determining the next agent using hierarchical logic:
+     * 1. High-priority hardcoded rules for direct conversational continuations
+     * 2. AI analysis with detailed context understanding 
+     * 3. Simple keyword fallback if AI fails
      */
-    async analyzeIntent(message, history) {
+    async determineNextAgent(message, history, restaurantId) {
         try {
-            // Get recent conversation context
-            const recentContext = this.getRecentContext(history);
+            console.log('🧠 AI-first routing: analyzing message and context');
             
-            // Check if we're in an ongoing reservation flow
-            const isReservationFlow = this.conversationState.context.bookingInProgress;
-            
-            // ENHANCED: Immediate intent detection for context switches
-            const immediateIntents = {
-                support: ['owner info', 'owner information', 'contact info', 'contact information', 
-                         'who owns', 'restaurant owner', 'manager info', 'phone number', 'email',
-                         'contact details', 'owner details', 'manager contact'],
-                menu: ['menu', 'food', 'dishes', 'what do you serve', 'prices', 'cost',
-                       'vegetarian', 'vegan', 'gluten free', 'dessert', 'appetizer'],
-                location: ['transfer', 'airport', 'pickup', 'transportation', 'hotel',
-                          'directions', 'address', 'how to get there', 'taxi'],
-                celebration: ['celebration', 'birthday', 'anniversary', 'romantic', 'special occasion',
-                             'cake', 'flowers', 'surprise']
-            };
-            
-            const msg = message.toLowerCase();
-            
-            // Check for immediate intent matches (highest priority)
-            for (const [intent, keywords] of Object.entries(immediateIntents)) {
-                if (keywords.some(keyword => msg.includes(keyword))) {
-                    console.log(`🎯 Immediate intent detected: ${intent} for "${message}"`);
-                    return intent;
-                }
+            // STEP 1: High-priority hardcoded rules for direct conversational continuations
+            const conversationContinuation = this.detectConversationContinuation(message, history);
+            if (conversationContinuation) {
+                console.log(`🎯 Conversation continuation detected: ${conversationContinuation.agent}`);
+                return conversationContinuation.agent;
             }
             
-            // CRITICAL FIX: Route availability queries with specific booking details to TableAvailabilityAgent
-            const hasSpecificBookingDetails = /(\\d+\\s*(pm|am)|friday|saturday|sunday|monday|tuesday|wednesday|thursday|tomorrow|today|\\d+\\s*(people|person|guests))/i.test(message);
-            const isAvailabilityQuery = msg.includes('available') || msg.includes('do you have') || msg.includes('table for');
-            
-            if (isAvailabilityQuery && hasSpecificBookingDetails) {
-                console.log('🔄 Availability query with specific details → routing to availability agent');
+            // STEP 2: Context modification detection (time/date changes in booking flow)
+            const contextModification = this.detectContextModification(message, history);
+            if (contextModification) {
+                console.log(`🧠 Context modification detected: maintaining ${contextModification.maintainAgent}`);
+                this.updateContextModification(contextModification);
                 return 'availability';
             }
             
-            // Use AI to analyze intent with context for complex cases
-            const { askGemini } = await import('../AIService.js');
-            
-            const intentPrompt = `Analyze the user's intent from this message in the context of a restaurant reservation system.
-
-Recent conversation context:
-${recentContext || 'No recent context'}
-
-Current message: "${message}"
-
-Is this part of an ongoing reservation? ${isReservationFlow ? 'Yes' : 'No'}
-
-IMPORTANT ROUTING RULES:
-- If asking about availability WITH specific details (date/time/party size) → "availability" 
-- If continuing an existing booking process → "reservation"
-- If asking general questions about tables/capacity → "availability"
-- If providing contact info or confirming booking → "reservation"
-
-Based on the message and context, determine the PRIMARY intent from these options:
-- availability: Checking if tables are available, asking about capacity, or initial availability queries
-- reservation: Continuing a booking process, providing contact info, or finalizing reservations  
-- menu: Asking about food, drinks, prices, dietary options
-- celebration: Special occasions, birthdays, anniversaries, romantic dining
-- location: Address, directions, transfers, hotels
-- support: Contact info, complaints, help requests, owner information
-- restaurant: General info, hours, atmosphere, reviews
-
-Respond with just the intent name (one word).`;
-
-            const intentResponse = await askGemini(intentPrompt, [], null);
-            const detectedIntent = intentResponse.response?.toLowerCase().trim();
-            
-            // Validate the response is one of our expected intents
-            const validIntents = ['reservation', 'availability', 'menu', 'celebration', 'location', 'support', 'restaurant'];
-            
-            if (validIntents.includes(detectedIntent)) {
-                console.log(`🤖 AI detected intent: ${detectedIntent} for message: "${message}"`);
-                return detectedIntent;
-            } else {
-                // Fallback logic for edge cases
-                console.log(`🤖 AI intent analysis returned unexpected result: ${detectedIntent}, using fallback`);
-                
-                // Smart fallback based on context
-                if (isReservationFlow && !msg.includes('owner') && !msg.includes('menu') && !msg.includes('contact')) {
-                    return 'reservation';
-                } else if (msg.includes('available') || msg.includes('do you have') || msg.includes('table for')) {
-                    return 'availability';
-                } else if (msg.includes('book') || msg.includes('reserve')) {
-                    return 'availability'; // Route booking requests to availability first
-                } else if (msg.includes('menu') || msg.includes('food')) {
-                    return 'menu';
-                } else if (msg.includes('owner') || msg.includes('contact')) {
-                    return 'support';
-                } else {
-                    return 'restaurant';
-                }
+            // STEP 3: AI analysis with full context
+            const aiIntent = await this.analyzeIntentWithAI(message, history, restaurantId);
+            if (aiIntent) {
+                console.log(`🤖 AI determined intent: ${aiIntent}`);
+                return aiIntent;
             }
+            
+            // STEP 4: Robust keyword fallback
+            const keywordIntent = this.keywordFallbackAnalysis(message);
+            console.log(`🔤 Keyword fallback intent: ${keywordIntent}`);
+            return keywordIntent;
             
         } catch (error) {
-            console.error('❌ Error in AI intent analysis:', error);
-            
-            // Fallback to simple logic
-            const msg = message.toLowerCase();
-            
-            // Enhanced fallback with proper availability routing
-            if (msg.includes('owner') || msg.includes('contact')) {
-                return 'support';
-            } else if (msg.includes('menu') || msg.includes('food')) {
-                return 'menu';
-            } else if (msg.includes('available') || msg.includes('do you have') || msg.includes('table for')) {
-                return 'availability';
-            } else if (this.conversationState.context.bookingInProgress && 
-                      !msg.includes('owner') && !msg.includes('menu')) {
-                return 'reservation';
-            } else if (msg.includes('book') || msg.includes('reserve')) {
-                return 'availability'; // Route booking requests to availability first
-            } else {
-                return 'restaurant';
+            console.error('❌ Error in determineNextAgent:', error);
+            return this.keywordFallbackAnalysis(message);
+        }
+    }
+    
+    /**
+     * Detect direct conversational continuations (high-priority rules)
+     */
+    detectConversationContinuation(message, history) {
+        const msg = message.toLowerCase().trim();
+        
+        // Get recent assistant message for context
+        const lastAssistantMessage = history
+            .filter(m => m.sender === 'ai')
+            .slice(-1)[0]?.text?.toLowerCase() || '';
+        
+        // Rule 1: Table type selection ("Which type would you prefer?")
+        if (lastAssistantMessage.includes('which type would you prefer') ||
+            lastAssistantMessage.includes('table types available')) {
+            const tableTypes = ['standard', 'grass', 'anniversary'];
+            if (tableTypes.some(type => msg.includes(type))) {
+                return { agent: 'availability', reason: 'table_type_selection' };
             }
         }
+        
+        // Rule 2: Booking confirmation flow
+        if (lastAssistantMessage.includes('please provide') && 
+            (lastAssistantMessage.includes('name') || lastAssistantMessage.includes('contact'))) {
+            return { agent: 'reservation', reason: 'contact_info_collection' };
+        }
+        
+        // Rule 3: Date/time clarifications in booking context
+        const isBookingContext = this.conversationState.context.bookingInProgress ||
+                                lastAssistantMessage.includes('available') ||
+                                lastAssistantMessage.includes('reservation') ||
+                                lastAssistantMessage.includes('what date');
+        
+        // Check for date responses like "tonight", "tomorrow", "today"
+        const dateResponses = ['tonight', 'today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        if (isBookingContext && dateResponses.some(date => msg.includes(date))) {
+            return { agent: 'availability', reason: 'date_clarification' };
+        }
+        
+        // Rule 4: Yes/No responses in booking context
+        if (isBookingContext && (msg === 'yes' || msg === 'yeah' || msg === 'sure' || msg === 'ok')) {
+            // Continue with the same agent type based on context
+            return { agent: this.conversationState.activeAgent || 'availability', reason: 'affirmative_response' };
+        }
+        
+        return null;
+    }
+    
+    /**
+     * AI-powered intent analysis with full context
+     */
+    async analyzeIntentWithAI(message, history, restaurantId) {
+        try {
+            const { askGemini } = await import('../AIService.js');
+            
+            // Build rich context for AI analysis
+            const recentContext = this.getRecentContext(history);
+            const conversationState = {
+                bookingInProgress: this.conversationState.context.bookingInProgress,
+                activeAgent: this.conversationState.activeAgent,
+                lastIntent: this.conversationState.currentIntent
+            };
+            
+            const aiPrompt = `You are an expert conversation analyst for a restaurant reservation system. Analyze this message in context and determine the user's primary intent.
+
+CONVERSATION CONTEXT:
+${recentContext || 'New conversation'}
+
+CONVERSATION STATE:
+- Booking in progress: ${conversationState.bookingInProgress ? 'Yes' : 'No'}
+- Last active agent: ${conversationState.activeAgent || 'None'}
+- Previous intent: ${conversationState.lastIntent || 'None'}
+
+CURRENT MESSAGE: "${message}"
+
+BUSINESS LOGIC RULES:
+1. Any NEW booking request (with date/time/party size) → "availability" (must check availability first)
+2. Continuing existing booking process → "reservation"
+3. General availability questions → "availability" 
+4. Menu/food questions → "menu"
+5. Special occasions/celebrations → "celebration"
+6. Location/directions/transport → "location"
+7. Owner contact/support → "support"
+8. General restaurant info → "restaurant"
+
+RETURN ONLY ONE WORD from these valid intents: availability, reservation, menu, celebration, location, support, restaurant`;
+
+            const result = await askGemini(aiPrompt, [], restaurantId);
+            const intent = result.response?.toLowerCase().trim();
+            
+            const validIntents = ['availability', 'reservation', 'menu', 'celebration', 'location', 'support', 'restaurant'];
+            
+            if (validIntents.includes(intent)) {
+                return intent;
+            }
+            
+            console.warn(`🤖 AI returned invalid intent: ${intent}`);
+            return null;
+            
+        } catch (error) {
+            console.error('❌ AI intent analysis failed:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Simple keyword-based fallback analysis
+     */
+    keywordFallbackAnalysis(message) {
+        const msg = message.toLowerCase();
+        
+        // Availability keywords
+        if (msg.includes('available') || msg.includes('do you have') || 
+            msg.includes('table for') || msg.includes('book') || msg.includes('reserve')) {
+            return 'availability';
+        }
+        
+        // Menu keywords
+        if (msg.includes('menu') || msg.includes('food') || msg.includes('dish') || 
+            msg.includes('price') || msg.includes('eat')) {
+            return 'menu';
+        }
+        
+        // Support keywords
+        if (msg.includes('owner') || msg.includes('contact') || msg.includes('phone') || 
+            msg.includes('email') || msg.includes('manager')) {
+            return 'support';
+        }
+        
+        // Celebration keywords
+        if (msg.includes('birthday') || msg.includes('anniversary') || 
+            msg.includes('celebration') || msg.includes('romantic')) {
+            return 'celebration';
+        }
+        
+        // Location keywords
+        if (msg.includes('address') || msg.includes('location') || msg.includes('transfer') || 
+            msg.includes('hotel') || msg.includes('pickup')) {
+            return 'location';
+        }
+        
+        // Default to restaurant info
+        return 'restaurant';
+    }
+    
+    /**
+     * Update context with modification data
+     */
+    updateContextModification(contextModification) {
+        this.conversationState.context.modifiedContext = {
+            type: contextModification.modificationType,
+            newValue: contextModification.newValue,
+            originalMessage: contextModification.originalMessage,
+            timestamp: new Date().toISOString()
+        };
+    }
+    
+    /**
+     * Check if user message is a simple modification of existing booking context
+     * Returns the agent to maintain and modified context, or null if not a context modification
+     */
+    /**
+     * Check if user message is a simple modification of existing booking context
+     * Returns the agent to maintain and modified context, or null if not a context modification
+     */
+    detectContextModification(message, history) {
+        const msg = message.toLowerCase().trim();
+        
+        // Check if we're in an availability/booking context
+        const isInBookingFlow = this.conversationState.context.bookingInProgress || 
+                               this.conversationState.context.availabilityInProgress ||
+                               this.conversationState.activeAgent === 'TableAvailabilityAgent';
+        
+        // Only apply this logic if we're in a booking/availability flow
+        if (!isInBookingFlow) {
+            return null;
+        }
+        
+        // Also check conversation history for availability context
+        const recentContext = this.getRecentContext(history);
+        const hasAvailabilityContext = recentContext.includes('available') || 
+                                     recentContext.includes('table') || 
+                                     recentContext.includes('people') ||
+                                     recentContext.includes('pm') ||
+                                     recentContext.includes('am');
+        
+        if (!isInBookingFlow && !hasAvailabilityContext) {
+            return null;
+        }
+        
+        // Pattern matching for common context modifications
+        const contextModifications = {
+            time: {
+                patterns: [
+                    /what about (?:at )?(\d{1,2}(?::\d{2})?\s*(?:pm|am))/i,
+                    /how about (?:at )?(\d{1,2}(?::\d{2})?\s*(?:pm|am))/i,
+                    /actually (?:at )?(\d{1,2}(?::\d{2})?\s*(?:pm|am))/i,
+                    /instead (?:at )?(\d{1,2}(?::\d{2})?\s*(?:pm|am))/i,
+                    /^(?:at )?(\d{1,2}(?::\d{2})?\s*(?:pm|am))$/i,
+                    /(?:^|\s)(\d{1,2}(?::\d{2})?\s*(?:pm|am))(?:\s|$)/i
+                ]
+            },
+            date: {
+                patterns: [
+                    /what about (?:on )?(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+                    /how about (?:on )?(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+                    /actually (?:on )?(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+                    /instead (?:on )?(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i
+                ]
+            },
+            partySize: {
+                patterns: [
+                    /what about (?:for )?(\d+) (?:people|person|guests?)/i,
+                    /how about (?:for )?(\d+) (?:people|person|guests?)/i,
+                    /actually (?:for )?(\d+) (?:people|person|guests?)/i,
+                    /instead (?:for )?(\d+) (?:people|person|guests?)/i
+                ]
+            }
+        };
+        
+        // Check each modification type
+        for (const [modificationType, { patterns }] of Object.entries(contextModifications)) {
+            for (const pattern of patterns) {
+                const match = msg.match(pattern);
+                if (match) {
+                    console.log(`🧠 Context modification detected: ${modificationType} = "${match[1]}"`);
+                    
+                    return {
+                        maintainAgent: 'TableAvailabilityAgent',
+                        modificationType,
+                        newValue: match[1],
+                        originalMessage: message
+                    };
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Legacy analyzeIntent function - now delegates to determineNextAgent
+     * @deprecated Use determineNextAgent for new implementations
+     */
+    async analyzeIntent(message, history, restaurantId = null) {
+        console.log('⚠️ Using legacy analyzeIntent - consider using determineNextAgent');
+        return await this.determineNextAgent(message, history, restaurantId);
     }
 
     /**

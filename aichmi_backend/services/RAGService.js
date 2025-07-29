@@ -52,6 +52,10 @@ class RAGService {
         try {
             console.log(`🔍 RAG retrieving data for: "${query}" (Agent: ${agentType})`);
             
+            // Fix null restaurantId issue - default to restaurant 1 if null/undefined
+            const effectiveRestaurantId = restaurantId || 1;
+            console.log(`🏪 Using restaurant ID: ${effectiveRestaurantId} (original: ${restaurantId})`);
+            
             const relevantData = {
                 restaurant: null,
                 owner: null,
@@ -69,10 +73,10 @@ class RAGService {
             };
 
             // Always get basic restaurant info
-            relevantData.restaurant = await RestaurantService.getRestaurantById(restaurantId);
+            relevantData.restaurant = await RestaurantService.getRestaurantById(effectiveRestaurantId);
             
             if (!relevantData.restaurant) {
-                throw new Error(`Restaurant not found: ${restaurantId}`);
+                throw new Error(`Restaurant not found: ${effectiveRestaurantId}`);
             }
 
             // Keyword-based retrieval
@@ -82,7 +86,7 @@ class RAGService {
             console.log(`🎯 Identified domains: ${domains.join(', ')}`);
             
             // Retrieve data based on identified domains
-            await this.retrieveByDomains(domains, restaurantId, relevantData);
+            await this.retrieveByDomains(domains, effectiveRestaurantId, relevantData);
             
             // Calculate retrieval confidence
             relevantData.retrievalContext.confidence = this.calculateConfidence(keywords, domains);
@@ -94,6 +98,234 @@ class RAGService {
         } catch (error) {
             console.error('❌ RAG retrieval error:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Unified AI-first retrieval system - single entry point for all agents
+     * Uses AI to extract entities and perform targeted queries
+     */
+    /**
+     * Unified AI-first retrieval system - single entry point for all agents
+     * Uses AI to extract entities and perform targeted queries
+     */
+    async retrieveContextForQuery(query, restaurantId) {
+        try {
+            console.log(`🤖 AI-first retrieval for: "${query}"`);
+            
+            // Fix null restaurantId issue - default to restaurant 1 if null/undefined
+            const effectiveRestaurantId = restaurantId || 1;
+            console.log(`🏪 Using restaurant ID: ${effectiveRestaurantId} (original: ${restaurantId})`);
+            
+            // Validate restaurantId
+            if (!effectiveRestaurantId) {
+                console.warn('⚠️ No restaurantId provided, falling back to existing method');
+                return await this.retrieveRelevantData(query, effectiveRestaurantId);
+            }
+            
+            // Step 1: AI entity extraction
+            const entities = await this.extractEntitiesWithAI(query);
+            console.log('🧠 Extracted entities:', entities);
+            
+            // Step 2: Targeted database queries based on extracted entities
+            const context = {
+                restaurant: await RestaurantService.getRestaurantById(effectiveRestaurantId),
+                entities,
+                query
+            };
+            
+            // Get availability data if we have booking details
+            if (entities.date && entities.time && entities.partySize) {
+                context.availability = await RestaurantService.getAvailableTableTypesForTime({
+                    restaurantId: effectiveRestaurantId,
+                    reservationDate: entities.date,
+                    reservationTime: entities.time,
+                    guests: entities.partySize
+                });
+            }
+            
+            // Get menu data if we have menu keywords
+            if (entities.menuKeywords && entities.menuKeywords.length > 0) {
+                context.menu = await this.hybridMenuSearch(
+                    entities.menuKeywords.join(' '), 
+                    effectiveRestaurantId, 
+                    {
+                        is_vegetarian: entities.menuKeywords.includes('vegetarian'),
+                        is_vegan: entities.menuKeywords.includes('vegan'),
+                        is_gluten_free: entities.menuKeywords.includes('gluten-free')
+                    }
+                );
+            }
+            
+            // Get specific info if requested
+            if (entities.requestedInfo && entities.requestedInfo.length > 0) {
+                for (const info of entities.requestedInfo) {
+                    switch (info) {
+                        case 'hours':
+                            context.hours = await RestaurantService.getRestaurantHours(effectiveRestaurantId);
+                            break;
+                        case 'owner_contact':
+                            context.owner = await RestaurantService.getRestaurantOwner(effectiveRestaurantId);
+                            break;
+                        case 'menu':
+                            context.menu = await RestaurantService.getMenuItems(effectiveRestaurantId);
+                            break;
+                    }
+                }
+            }
+            
+            console.log('✅ Context retrieval complete');
+            return context;
+            
+        } catch (error) {
+            console.error('❌ Context retrieval error:', error);
+            // Fallback to existing method
+            return await this.retrieveRelevantData(query, effectiveRestaurantId);
+        }
+    }
+
+    /**
+     * Simple AI entity extraction using LLM
+     */
+    /**
+     * Simple AI entity extraction using LLM
+     */
+    async extractEntitiesWithAI(query) {
+        try {
+            // Import TimezoneUtils for better date handling
+            const TimezoneUtils = (await import('../utils/timezoneUtils.js')).default;
+            
+            // Get current Athens time context for AI
+            const timeContext = TimezoneUtils.getTimeContext();
+            
+            // Enhanced prompt with current date context and explicit instructions
+            const prompt = `You are a smart entity extractor for a restaurant reservation system. Extract key entities from this query and return ONLY valid JSON.
+
+CURRENT DATE CONTEXT (Athens/Greece Timezone):
+- TODAY: ${timeContext.today.date} (${timeContext.today.dayName})
+- TOMORROW: ${timeContext.tomorrow.date} (${timeContext.tomorrow.dayName})
+- CURRENT YEAR: ${timeContext.currentYear}
+
+Query: "${query}"
+
+EXTRACTION RULES:
+- "tonight" = TODAY (${timeContext.today.date})
+- "today" = TODAY (${timeContext.today.date})
+- "tomorrow" = TOMORROW (${timeContext.tomorrow.date})
+- "friday", "saturday" etc. = next occurrence of that weekday
+- Times like "9 PM", "9pm", "21:00" should be converted to 24h format (21:00)
+- Party sizes: look for "2 people", "party of 4", "6 guests" etc.
+- Menu keywords: food terms like "seafood", "vegetarian", "gluten-free"
+- Ambiance: "romantic", "quiet", "outdoor", "private"
+
+Extract:
+- date: ISO date (YYYY-MM-DD) or null
+- time: 24h format (HH:MM) or null  
+- partySize: number or null
+- menuKeywords: array of food-related terms
+- ambianceKeywords: array of atmosphere terms
+- requestedInfo: array from [hours, owner_contact, menu, location]
+
+Return ONLY JSON, no explanations:`;
+
+            // Use the existing AI infrastructure to avoid API key issues
+            const { askGemini } = await import('../services/AIService.js');
+            
+            // Use a dummy restaurant ID to avoid RAG dependency loops
+            const result = await askGemini(prompt, [], 1);
+            const text = result.response.replace(/```json\n?|\n?```/g, '').trim();
+            
+            const parsed = JSON.parse(text);
+            console.log('🧠 Enhanced AI extraction successful:', parsed);
+            return parsed;
+            
+        } catch (error) {
+            console.error('❌ Enhanced AI entity extraction failed:', error);
+            
+            // Smart fallback using manual parsing
+            return this.extractEntitiesManually(query);
+        }
+    }
+
+    /**
+     * Fallback manual entity extraction using regex and TimezoneUtils
+     */
+    async extractEntitiesManually(query) {
+        try {
+            const TimezoneUtils = (await import('../utils/timezoneUtils.js')).default;
+            const lowerQuery = query.toLowerCase();
+            
+            const entities = {
+                date: null,
+                time: null,
+                partySize: null,
+                menuKeywords: [],
+                ambianceKeywords: [],
+                requestedInfo: []
+            };
+            
+            // Date extraction
+            if (lowerQuery.includes('tonight') || lowerQuery.includes('today')) {
+                entities.date = TimezoneUtils.getCurrentAthensDate();
+            } else if (lowerQuery.includes('tomorrow')) {
+                entities.date = TimezoneUtils.getTomorrowAthensDate();
+            }
+            
+            // Time extraction using TimezoneUtils
+            entities.time = TimezoneUtils.parseUserTime(query);
+            
+            // Party size extraction
+            const partySizeMatch = query.match(/(\d+)\s*(people|person|guests?|party)/i);
+            if (partySizeMatch) {
+                entities.partySize = parseInt(partySizeMatch[1]);
+            }
+            
+            // Menu keywords - be more selective to avoid false positives from system prompts
+            const menuKeywordPatterns = ['menu', 'food', 'dish', 'vegetarian', 'vegan', 'gluten', 'seafood', 'main', 'dessert', 'appetizer'];
+            // Only detect menu keywords if it's a short, user-like query (not a long AI prompt)
+            if (query.length < 200 && !query.toLowerCase().includes('you are') && !query.toLowerCase().includes('extract')) {
+                entities.menuKeywords = menuKeywordPatterns.filter(keyword => lowerQuery.includes(keyword));
+            } else {
+                entities.menuKeywords = [];
+            }
+            
+            // Ambiance keywords - same filtering logic
+            const ambianceKeywordPatterns = ['romantic', 'quiet', 'outdoor', 'private', 'intimate', 'cozy'];
+            if (query.length < 200 && !query.toLowerCase().includes('you are') && !query.toLowerCase().includes('extract')) {
+                entities.ambianceKeywords = ambianceKeywordPatterns.filter(keyword => lowerQuery.includes(keyword));
+            } else {
+                entities.ambianceKeywords = [];
+            }
+            
+            // Requested info - only for genuine user queries
+            if (query.length < 200 && !query.toLowerCase().includes('you are') && !query.toLowerCase().includes('extract')) {
+                if (lowerQuery.includes('hour') || lowerQuery.includes('open') || lowerQuery.includes('close')) {
+                    entities.requestedInfo.push('hours');
+                }
+                if (lowerQuery.includes('contact') || lowerQuery.includes('phone') || lowerQuery.includes('owner')) {
+                    entities.requestedInfo.push('owner_contact');
+                }
+                if (lowerQuery.includes('menu')) {
+                    entities.requestedInfo.push('menu');
+                }
+                if (lowerQuery.includes('location') || lowerQuery.includes('address') || lowerQuery.includes('where')) {
+                    entities.requestedInfo.push('location');
+                }
+            }
+            
+            console.log('🛠️ Manual extraction successful:', entities);
+            return entities;
+            
+        } catch (error) {
+            console.error('❌ Manual extraction failed:', error);
+            return {
+                date: null,
+                time: null,
+                partySize: null,
+                menuKeywords: [],
+                ambianceKeywords: [],
+                requestedInfo: []
+            };
         }
     }
 
@@ -381,11 +613,14 @@ class RAGService {
             console.log(`📊 Found ${menuResult.length} menu items after vector filtering`);
             
             // Convert distance to similarity score
-            const scoredItems = menuResult.map(item => {
+            const scoredItems = menuResult.map((item, index) => {
                 const similarity = 1 - item.distance; // Convert distance to similarity
                 const relevanceScore = Math.max(0, similarity); // Ensure non-negative
                 
-                console.log(`📊 Menu item "${item.name}" similarity: ${similarity.toFixed(4)} (distance: ${item.distance.toFixed(4)})`);
+                // Reduced logging - only log top 3 items for brevity
+                if (index < 3) {
+                    console.log(`📊 Top menu item "${item.name}" similarity: ${similarity.toFixed(4)}`);
+                }
                 
                 return { 
                     ...item, 

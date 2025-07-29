@@ -48,6 +48,7 @@ export class TimezoneUtils {
 
         switch (lowerTerm) {
             case 'today':
+            case 'tonight':
                 return formatInTimeZone(today, ATHENS_TIMEZONE, 'yyyy-MM-dd');
             case 'tomorrow':
                 return formatInTimeZone(addDays(today, 1), ATHENS_TIMEZONE, 'yyyy-MM-dd');
@@ -181,6 +182,29 @@ export class TimezoneUtils {
         }
         
         return days;
+    }
+
+    /**
+     * Get comprehensive time context for AI systems
+     */
+    static getTimeContext() {
+        const now = this.getCurrentAthensTime();
+        const currentYear = formatInTimeZone(now, ATHENS_TIMEZONE, 'yyyy');
+        
+        return {
+            currentDateTime: formatInTimeZone(now, ATHENS_TIMEZONE, 'yyyy-MM-dd HH:mm:ss zzz'),
+            currentYear: parseInt(currentYear),
+            today: {
+                date: this.getCurrentAthensDate(),
+                dayName: formatInTimeZone(now, ATHENS_TIMEZONE, 'EEEE'),
+                display: formatInTimeZone(now, ATHENS_TIMEZONE, 'MMMM d, yyyy')
+            },
+            tomorrow: {
+                date: this.getTomorrowAthensDate(),
+                dayName: formatInTimeZone(addDays(now, 1), ATHENS_TIMEZONE, 'EEEE'),
+                display: formatInTimeZone(addDays(now, 1), ATHENS_TIMEZONE, 'MMMM d, yyyy')
+            }
+        };
     }
 
     /**

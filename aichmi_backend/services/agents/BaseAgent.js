@@ -51,11 +51,45 @@ class BaseAgent {
     async retrieveRAGData(query, restaurantId) {
         try {
             console.log(`🔍 ${this.name} retrieving RAG data for: "${query}"`);
-            const agentType = this.name.replace('Agent', '').toLowerCase();
-            return await RAGService.retrieveRelevantData(query, restaurantId, agentType);
+            
+            // Defensive check for null restaurantId
+            if (!restaurantId) {
+                console.warn(`⚠️ ${this.name} received null restaurantId, using fallback`);
+                // Don't proceed with RAG if we don't have a restaurant ID
+                return {
+                    restaurant: null,
+                    entities: {},
+                    query: query
+                };
+            }
+            
+            return await RAGService.retrieveContextForQuery(query, restaurantId);
         } catch (error) {
             console.error(`❌ ${this.name} RAG retrieval error:`, error);
-            return null;
+            
+            // Try to get basic restaurant info at least
+            try {
+                const RestaurantService = (await import('../RestaurantService.js')).default;
+                const effectiveRestaurantId = restaurantId || 1;
+                const restaurant = await RestaurantService.getRestaurantById(effectiveRestaurantId);
+                
+                console.log(`🔄 ${this.name} fallback: Retrieved basic restaurant info`);
+                return {
+                    restaurant,
+                    entities: {},
+                    query: query,
+                    fallbackMode: true
+                };
+                
+            } catch (fallbackError) {
+                console.error(`❌ ${this.name} fallback also failed:`, fallbackError);
+                return {
+                    restaurant: null,
+                    entities: {},
+                    query: query,
+                    fallbackFailed: true
+                };
+            }
         }
     }
 

@@ -5,91 +5,29 @@ import db from '../config/database.js';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // RAG function to fetch relevant data based on user query
+/**
+ * @deprecated Use RAGService.retrieveContextForQuery() instead
+ * This function is kept for backward compatibility only
+ */
 async function fetchRelevantData(prompt, restaurantId = null) {
-  const relevantData = {
-    restaurants: [],
-    owners: [],
-    reservations: [],
-    generalInfo: {}
-  };
-
-  try {
-    const keywords = prompt.toLowerCase();
-    
-    if (!restaurantId) {
-      const allRestaurants = await RestaurantService.getAllRestaurants();
-      const found = allRestaurants.find(r =>
-        keywords.includes(r.name.toLowerCase())
-      );
-      if (found) {
-        restaurantId = found.restaurant_id || found.id;
-        relevantData.restaurants.push(found);
-
-        // Fetch owner data only if user asks about contact/owner info
-        if (keywords.includes('owner') || keywords.includes('contact') || keywords.includes('phone') || keywords.includes('email') || keywords.includes('who') || keywords.includes('manager')) {
-          const ownerQuery = `
-            SELECT o.first_name, o.last_name, o.phone, o.email, r.name as restaurant_name 
-            FROM owners o
-            JOIN restaurant r ON o.restaurant_id = r.restaurant_id
-            WHERE r.restaurant_id = $1
-          `;
-          const ownerResult = await db.query(ownerQuery, [restaurantId]);
-          console.log('🔍 OWNER DATA FETCHED for restaurant ID:', restaurantId);
-          console.log('🔍 OWNER DATA RESULT:', ownerResult);
-          relevantData.owners = ownerResult;
-        }
-      }
-    }
-
-    // This is now handled above - remove duplicate
-
-    if (
-      keywords.includes('transfer') ||
-      keywords.includes('transport') ||
-      keywords.includes('airport') ||
-      keywords.includes('pickup')
-    ) {
-      if (restaurantId) {
-        const transferQuery = `
-          SELECT tp.price_4_or_less, tp.price_5_to_8, h.name as hotel_name
-          FROM transfer_prices tp
-          JOIN hotel h ON tp.hotel_id = h.hotel_id
-          WHERE tp.restaurant_id = $1
-        `;
-        const transferResult = await db.query(transferQuery, [restaurantId]);
-        relevantData.generalInfo.transfers = transferResult;
-      }
-    }
-
-    if (
-      keywords.includes('available') ||
-      keywords.includes('book') ||
-      keywords.includes('reserve') ||
-      keywords.includes('date')
-    ) {
-      if (restaurantId) {
-        const bookedDatesQuery = `
-          SELECT fully_booked_dates 
-          FROM fully_booked_dates 
-          WHERE restaurant_id = $1
-        `;
-        const bookedResult = await db.query(bookedDatesQuery, [restaurantId]);
-        relevantData.generalInfo.bookedDates = bookedResult;
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching relevant data:', error);
-  }
-
-  return relevantData;
+  console.warn('⚠️ fetchRelevantData is deprecated. Use RAGService.retrieveContextForQuery() instead');
+  
+  // Import and delegate to the new unified system
+  const RAGService = await import('./RAGService.js');
+  return await RAGService.default.retrieveContextForQuery(prompt, restaurantId);
 }
 
 // Function to format retrieved data for the AI prompt
 function formatDataForPrompt(data) {
   let contextInfo = "\n\n--- RELEVANT INFORMATION ---\n";
 
+  // Handle both old and new RAG data structures
+  if (!data) {
+    return contextInfo + "--- END OF RELEVANT INFORMATION ---\n\n";
+  }
+
   // Format restaurant information
-  if (data.restaurants.length > 0) {
+  if (data.restaurants && data.restaurants.length > 0) {
     contextInfo += "\n**RESTAURANTS:**\n";
     data.restaurants.forEach(restaurant => {
       contextInfo += `- **${restaurant.name}**: ${restaurant.description}\n`;
@@ -101,7 +39,7 @@ function formatDataForPrompt(data) {
   }
 
   // Format owner information
-  if (data.owners.length > 0) {
+  if (data.owners && data.owners.length > 0) {
     contextInfo += "\n**RESTAURANT OWNERS/CONTACTS:**\n";
     data.owners.forEach(owner => {
       const ownerName = owner.first_name && owner.last_name 
@@ -139,7 +77,7 @@ function formatDataForPrompt(data) {
   }
 
   // Format table pricing
-  if (data.generalInfo.tables && data.generalInfo.tables.length > 0) {
+  if (data.generalInfo && data.generalInfo.tables && data.generalInfo.tables.length > 0) {
     contextInfo += "\n**TABLE TYPES & PRICING:**\n";
     data.generalInfo.tables.forEach(table => {
       contextInfo += `- **${table.table_type}**: €${table.table_price}\n`;
@@ -148,7 +86,7 @@ function formatDataForPrompt(data) {
   }
 
   // Format transfer information
-  if (data.generalInfo.transfers && data.generalInfo.transfers.length > 0) {
+  if (data.generalInfo && data.generalInfo.transfers && data.generalInfo.transfers.length > 0) {
     contextInfo += "\n**TRANSFER SERVICES:**\n";
     data.generalInfo.transfers.forEach(transfer => {
       contextInfo += `- **${transfer.name}**: €${transfer.price_4_or_less} (1-4 people), €${transfer.price_5_to_8} (5-8 people)\n`;
@@ -157,7 +95,7 @@ function formatDataForPrompt(data) {
   }
 
   // Format booked dates
-  if (data.generalInfo.bookedDates && data.generalInfo.bookedDates.length > 0) {
+  if (data.generalInfo && data.generalInfo.bookedDates && data.generalInfo.bookedDates.length > 0) {
     contextInfo += "\n**UNAVAILABLE DATES:**\n";
     data.generalInfo.bookedDates.forEach(date => {
       contextInfo += `- ${date.date} ${date.reason ? '(' + date.reason + ')' : ''}\n`;
@@ -189,10 +127,15 @@ function extractReservationFromResponse(responseText) {
 }
 
 export async function askGemini(prompt, history = [], restaurantId = null) {
-  const relevantData = await fetchRelevantData(prompt, restaurantId);
+  // Skip RAG for internal AI analysis prompts to avoid circular dependencies
+  const isInternalAnalysisPrompt = prompt.includes('You are an expert conversation analyst') || 
+                                  prompt.includes('Extract reservation details') ||
+                                  prompt.includes('Extract key entities');
+  
+  const relevantData = isInternalAnalysisPrompt ? null : await fetchRelevantData(prompt, restaurantId);
   let restaurantName = null;
 
-  if (relevantData.restaurants && relevantData.restaurants.length > 0) {
+  if (relevantData && relevantData.restaurants && relevantData.restaurants.length > 0) {
     restaurantName = relevantData.restaurants[0].name;
   } else if (restaurantId) {
     // Defensive: fetch restaurant name directly if not in array

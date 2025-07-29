@@ -1357,7 +1357,7 @@ Respond in this exact JSON format:
         // Extract date using timezone utils
         if (msg.includes('tomorrow')) {
             details.date = TimezoneUtils.getTomorrowAthensDate();
-        } else if (msg.includes('today')) {
+        } else if (msg.includes('today') || msg.includes('tonight')) {
             details.date = TimezoneUtils.getCurrentAthensDate();
         } else {
             // Check for weekday names

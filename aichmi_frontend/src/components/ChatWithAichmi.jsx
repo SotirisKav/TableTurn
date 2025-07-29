@@ -36,9 +36,14 @@ function parseStructuredText(text) {
 
         // Check if it's a list (contains bullet points or numbers)
         // Skip list parsing for table availability responses that should remain as plain text
+        // Also skip if it's a simple table type listing with prices
+        const isTableTypeListing = text.includes('table types available') ||
+                                  (text.includes('•') && text.includes('€') && text.match(/grass|standard|anniversary/i));
+        
         if ((text.includes('•') || /^\d+\./.test(text.trim()) || text.includes('- ')) &&
             !text.includes('Which type of table would you prefer') &&
-            !text.includes('Great news! We have tables available')) {
+            !text.includes('Great news! We have tables available') &&
+            !isTableTypeListing) {
             return parseList(text);
         }
 
@@ -352,8 +357,11 @@ function AnimatedText({ text, delay = 0 }) {
             case 'paragraph':
             default:
                 const textContent = content.content || content;
-                // Process markdown bold text
-                const processedText = textContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                // Process markdown bold text and convert bullet points to proper HTML
+                let processedText = textContent
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/^• /gm, '• ') // Preserve bullet point format
+                    .replace(/\n/g, '<br />'); // Convert newlines to HTML breaks
                 return <div dangerouslySetInnerHTML={{ __html: processedText }}></div>;
         }
     };
