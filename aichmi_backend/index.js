@@ -2,8 +2,10 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import helmet from 'helmet';
 import { fileURLToPath } from 'url';
 import RestaurantService from './services/RestaurantService.js';
+import basicAuth from './middleware/basicAuth.js';
 import chatRouter from './routes/chat.js';
 import reservationRouter from './routes/reservation.js';
 import authRouter from './routes/auth.js';
@@ -20,6 +22,23 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:", "http:"],
+      connectSrc: ["'self'", "https://api.gemini.com", "https://maps.googleapis.com"]
+    }
+  }
+}));
+
+// Basic Auth middleware (can be toggled via environment)
+app.use(basicAuth);
+
 // CORS middleware - Allow frontend to connect
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8080'],
@@ -31,10 +50,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve React app static files FIRST (highest priority)
-app.use(express.static(path.join(__dirname, '../aichmi_frontend/dist')));
+// In production, the frontend build will be copied to the public directory
+const frontendPath = process.env.NODE_ENV === 'production' 
+  ? path.join(__dirname, 'public')
+  : path.join(__dirname, '../aichmi_frontend/dist');
+
+app.use(express.static(frontendPath));
 
 // Serve other static files from the public directory
-app.use('/public', express.static(path.join(__dirname, '../public')));
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // Set the view engine to EJS (for legacy routes if needed)
 app.set('view engine', 'ejs');
@@ -99,7 +123,10 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  res.sendFile(path.join(__dirname, '../aichmi_frontend/dist/index.html'));
+  const indexPath = process.env.NODE_ENV === 'production'
+    ? path.join(__dirname, 'public/index.html')
+    : path.join(__dirname, '../aichmi_frontend/dist/index.html');
+  res.sendFile(indexPath);
 });
 
 const PORT = process.env.PORT || 8080;

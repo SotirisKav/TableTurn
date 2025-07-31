@@ -1,0 +1,11 @@
+# Backup files
+*.bak
+
+# Deployment packages
+*.zip
+
+# Log files
+*.log
+
+# Local environment files
+.env.local
