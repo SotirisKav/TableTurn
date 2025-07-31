@@ -13,3 +13,4 @@ dist/
 .serena
 CLAUDE.md
 .env.azure
+*.zip
