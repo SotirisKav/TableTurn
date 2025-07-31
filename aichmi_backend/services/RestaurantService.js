@@ -1026,6 +1026,21 @@ class RestaurantService {
             throw error;
         }
     }
+
+    static async getMaxTableCapacity(restaurantId) {
+        try {
+            const query = `
+                SELECT MAX(capacity) as max_capacity
+                FROM tables
+                WHERE restaurant_id = $1
+            `;
+            const result = await db.query(query, [restaurantId]);
+            return result && result.length > 0 ? result[0].max_capacity : 0;
+        } catch (error) {
+            console.error('Error fetching max table capacity:', error);
+            return 0;
+        }
+    }
     
 
 }

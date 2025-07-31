@@ -99,6 +99,24 @@ class TableAvailabilityAgent extends BaseAgent {
                 timestamp: new Date().toISOString()
             };
             
+            // CRITICAL: Signal when awaiting user table selection
+            if (isAwaitingTableSelection) {
+                console.log('🔔 AWAITING TABLE SELECTION: Signaling orchestrator');
+                agentResponse.contextData = {
+                    isAwaitingUserResponse: true,
+                    nextAgent: 'ReservationAgent',
+                    activeFlow: 'booking',
+                    flowState: {
+                        date: toolResult.date,
+                        time: toolResult.time,
+                        partySize: toolResult.partySize,
+                        availableTableTypes: toolResult.availableTableTypes,
+                        restaurantId: effectiveRestaurantId
+                    }
+                };
+                console.log('🔔 Context data:', agentResponse.contextData);
+            }
+            
             // Add handoff information if task is incomplete
             if (!taskCompletionAnalysis.isComplete) {
                 agentResponse.handoffSuggestion = taskCompletionAnalysis.suggestedAgent;
@@ -288,6 +306,20 @@ Respond ONLY with a JSON object: { "tool_to_call": "...", "parameters": {...} }`
     async executeCheckAvailability(params, restaurantId) {
         try {
             console.log('🔍 Checking availability:', params);
+            
+            // Pre-check: Verify party size doesn't exceed restaurant's maximum table capacity
+            const maxCapacity = await RestaurantService.getMaxTableCapacity(restaurantId);
+            if (params.partySize > maxCapacity) {
+                return {
+                    success: true,
+                    available: false,
+                    message: `Sorry, we can only accommodate up to ${maxCapacity} people. Your party size of ${params.partySize} exceeds our maximum table capacity.`,
+                    date: params.date,
+                    time: params.time,
+                    partySize: params.partySize,
+                    reason: 'exceeds_capacity'
+                };
+            }
             
             // Get available table types for the specific time
             const availableTableTypes = await RestaurantService.getAvailableTableTypesForTime({

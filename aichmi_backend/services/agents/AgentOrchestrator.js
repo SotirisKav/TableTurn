@@ -29,19 +29,96 @@ class AgentOrchestrator {
             SupportContactAgent: new SupportContactAgent()
         };
         
-        // Conversation state for tracking agent handoffs and booking flow
-        this.conversationState = {
+        // SESSION-LEVEL STATE MANAGEMENT: Store multiple conversation states by sessionId
+        this.sessionStates = new Map();
+        
+        console.log('🎭 AgentOrchestrator initialized with session-level state management');
+        console.log('🎭 Available agents:', Object.keys(this.agents).length);
+    }
+    /**
+     * SESSION-LEVEL STATE MANAGEMENT METHODS
+     */
+    
+    /**
+     * Get or create conversation state for a session
+     */
+    getSessionState(sessionId) {
+        if (!sessionId) {
+            sessionId = 'default';
+        }
+        
+        if (!this.sessionStates.has(sessionId)) {
+            console.log(`🆕 Creating new session state for: ${sessionId}`);
+            this.sessionStates.set(sessionId, this.createNewSessionState());
+        }
+        
+        return this.sessionStates.get(sessionId);
+    }
+    
+    /**
+     * Create a new session state structure
+     */
+    createNewSessionState() {
+        return {
             activeAgent: null,
             delegationChain: [],
             globalContext: {},
             remainingQuery: null,
-            activeFlow: null, // e.g., 'booking', 'menu_inquiry'
-            flowState: {},    // Stores collected data like { date, time, partySize }
-            isAwaitingResponse: false, // Legacy flag (kept for compatibility)
-            // NEW CRITICAL STATE PROPERTIES:
-            isAwaitingUserResponse: false, // Is the AI waiting for a direct answer?
-            nextAgent: null // Which agent should handle the next turn?
+            activeFlow: null,
+            flowState: {},
+            isAwaitingResponse: false,
+            isAwaitingUserResponse: false,
+            nextAgent: null,
+            // NEW: Interrupted flow storage for resumption
+            interruptedFlow: null,
+            interruptedAt: null
         };
+    }
+    
+    /**
+     * Save session state (for future persistence to database/redis)
+     */
+    saveSessionState(sessionId, state) {
+        if (!sessionId) sessionId = 'default';
+        this.sessionStates.set(sessionId, { ...state });
+        console.log(`💾 Session state saved for: ${sessionId}`);
+    }
+    
+    /**
+     * Detect if user wants to resume a previous conversation
+     */
+    async detectResumeIntent(message) {
+        try {
+            const { getAiPlan } = await import('../AIService.js');
+            
+            const resumePrompt = `Analyze this user message to determine if they want to resume a previous conversation or booking process.
+
+USER MESSAGE: "${message}"
+
+Does this message indicate the user wants to continue, resume, or get back to a previous conversation/booking?
+
+Examples of RESUME intent:
+- "let's continue the reservation"
+- "back to my booking"
+- "continue where we left off"
+- "yes let's proceed"
+- "resume my reservation"
+
+Examples of NOT resume intent:
+- "hello"
+- "what's your menu"
+- "new reservation"
+- "standard table"
+
+Respond with JSON: { "isResume": boolean, "confidence": "high|medium|low" }`;
+
+            const result = await getAiPlan(resumePrompt, [], {}, null);
+            return result?.isResume || false;
+            
+        } catch (error) {
+            console.error('❌ Error in resume intent detection:', error);
+            return false;
+        }
     }
 
     /**
@@ -52,152 +129,152 @@ class AgentOrchestrator {
      * 2. Execute: The specialized agent uses its own "Think -> Act -> Speak" loop
      * 3. Handoff: If the agent indicates task incompleteness, route to the next agent
      */
-    async processMessage(message, history = [], restaurantId = null) {
+    async processMessage(message, history = [], restaurantId = null, sessionId = null) {
         try {
-            console.log('🎭 HYBRID ARCHITECTURE: Dispatching message to specialized agents:', message);
+            console.log('🎭 SESSION-AWARE PROCESSING:', { message, sessionId, restaurantId });
             
+            // STEP 1: LOAD SESSION STATE
+            const sessionState = this.getSessionState(sessionId);
             const effectiveRestaurantId = restaurantId || 1;
-            let currentMessage = message;
-            let finalResponse = '';
+            let originalCompleteMessage = message;
+            let allToolResults = [];
+            let executionPlan;
             let responseType = 'message';
             let additionalData = {};
             
-            // NEW: Collect structured data instead of just appending responses
-            let allToolResults = [];
-            let originalCompleteMessage = message; // Store the original query for consolidation
-            
-            // Reset delegation chain for new conversation
-            this.conversationState.delegationChain = [];
-            
-            // Initialize next agent tracking variable
-            let nextAgentName = null;
-            
-            // MAIN DISPATCH LOOP: Continue until all parts of the query are handled
-            while (currentMessage) {
-                console.log('🔄 Processing message segment:', currentMessage);
-                console.log('🔍 State check - isAwaitingUserResponse:', this.conversationState.isAwaitingUserResponse);
-                console.log('🔍 State check - nextAgent:', this.conversationState.nextAgent);
+            // STEP 2: RESUME INTENT DETECTION
+            const isResumeIntent = await this.detectResumeIntent(message);
+            if (isResumeIntent && sessionState.interruptedFlow) {
+                console.log('🔄 RESUME DETECTED: Restoring interrupted booking flow');
+                console.log('📋 Interrupted flow data:', sessionState.interruptedFlow);
                 
-                let targetAgent;
+                // Restore the interrupted flow as active flow
+                sessionState.flowState = { ...sessionState.interruptedFlow };
+                sessionState.activeFlow = 'booking';
+                sessionState.isAwaitingUserResponse = true;
+                sessionState.nextAgent = 'ReservationAgent';
+                sessionState.interruptedFlow = null; // Clear interrupted flow
                 
-                // CRITICAL STATE-AWARE ROUTING: Check if we're awaiting a user response
-                if (this.conversationState.isAwaitingUserResponse && this.conversationState.nextAgent) {
-                    console.log(`🔍 State check PASSED. Directly routing to waiting agent: ${this.conversationState.nextAgent}`);
-                    targetAgent = this.conversationState.nextAgent;
-                    this.conversationState.isAwaitingUserResponse = false; // Reset the flag
-                    this.conversationState.nextAgent = null; // Clear the next agent
+                // Create execution plan to continue with ReservationAgent
+                executionPlan = [{
+                    step: 1,
+                    agent_to_use: 'ReservationAgent',
+                    sub_task_query: 'Continue with the booking process'
+                }];
+                
+                // Pass the restored context
+                sessionState.globalContext.bookingContext = sessionState.flowState;
+                console.log('✅ RESUMED: Full booking context restored');
+                
+            } else {
+                // STEP 3: NORMAL FLOW PROCESSING
+                
+                // Only reset delegation chain if not awaiting a user response
+                if (!sessionState.isAwaitingUserResponse) {
+                    console.log('🔄 New conversation turn - resetting delegation chain');
+                    sessionState.delegationChain = [];
+                }
+            
+                            // CRITICAL STATE-AWARE ROUTING: Check if we're awaiting a user response
+                if (sessionState.isAwaitingUserResponse && sessionState.nextAgent) {
                     
-                    // Execute single waiting agent
-                    const agentResult = await this.executeAgent(
-                        targetAgent, 
-                        currentMessage, 
-                        history, 
-                        effectiveRestaurantId,
-                        this.conversationState.globalContext
-                    );
+                    // --- THE CRITICAL INTERRUPTION CHECK ---
+                    const { isInterruption } = await import('../AIService.js');
+                    const isUserInterruption = await isInterruption(message);
                     
-                    // Handle single agent result (existing logic)
-                    console.log('📊 Agent result:', agentResult);
-                    
-                    // Update global context
-                    if (agentResult.toolResult) {
-                        this.conversationState.globalContext[targetAgent] = agentResult.toolResult;
-                        console.log(`🌐 Updated globalContext with ${targetAgent} result:`, agentResult.toolResult);
-                    }
-                    
-                    // Update delegation chain
-                    this.conversationState.delegationChain.push({
-                        agent: targetAgent,
-                        message: currentMessage,
-                        result: agentResult,
-                        timestamp: new Date().toISOString()
-                    });
-                    
-                    // Collect tool result
-                    allToolResults.push({
-                        tool: agentResult.toolResult?.tool || 'unknown',
-                        agent: targetAgent,
-                        data: agentResult.toolResult,
-                        timestamp: agentResult.timestamp
-                    });
-                    
-                    // Handle response types
-                    if (agentResult.type === 'redirect') {
-                        responseType = 'redirect';
-                        additionalData = { ...additionalData, ...agentResult };
-                    }
-                    
-                    // Check for handoffs (existing logic)
-                    if (agentResult.isTaskComplete === false && agentResult.handoffSuggestion) {
-                        currentMessage = agentResult.unansweredQuery;
-                        nextAgentName = agentResult.handoffSuggestion;
-                        this.conversationState.activeAgent = agentResult.handoffSuggestion;
-                        this.conversationState.isAwaitingResponse = false;
+                    if (isUserInterruption) {
+                        console.log("⚠️ INTERRUPTION DETECTED: User changed topic. Preserving flow state.");
+                        
+                        // CRITICAL: Store interrupted flow for later resumption
+                        if (sessionState.flowState && Object.keys(sessionState.flowState).length > 0) {
+                            sessionState.interruptedFlow = { ...sessionState.flowState };
+                            sessionState.interruptedAt = new Date().toISOString();
+                            console.log('💾 STORED interrupted flow for resumption:', sessionState.interruptedFlow);
+                        }
+                        
+                        // Reset awaiting state but preserve interrupted flow
+                        sessionState.isAwaitingUserResponse = false;
+                        sessionState.nextAgent = null;
+                        sessionState.activeFlow = null;
+                        sessionState.flowState = {};
+                        
+                        executionPlan = await this.determineExecutionPlan(message, history);
                     } else {
-                        currentMessage = null;
-                        nextAgentName = null;
-                        this.conversationState.activeAgent = null;
-                        this.conversationState.isAwaitingResponse = false;
+                        console.log(`🔍 CONTINUATION DETECTED: Routing to waiting agent: ${sessionState.nextAgent}`);
+                        
+                        // Create direct plan for continuation
+                        executionPlan = [{ 
+                            step: 1, 
+                            agent_to_use: sessionState.nextAgent, 
+                            sub_task_query: message 
+                        }];
+                        
+                        // Pass flowState as bookingContext
+                        sessionState.globalContext.bookingContext = sessionState.flowState;
+                        console.log('🔄 HANDOFF: Passing flowState as bookingContext:', sessionState.flowState);
+                        
+                        // Reset awaiting state
+                        sessionState.isAwaitingUserResponse = false;
+                        sessionState.nextAgent = null;
                     }
                     
                 } else {
                     console.log("🔍 State check FAILED. Using DECOMPOSITION MODEL...");
+                    executionPlan = await this.determineExecutionPlan(message, history);
+                }
+            } // End of normal flow processing
+            
+                        // MAIN EXECUTION LOOP: Execute the determined plan
+            if (executionPlan && executionPlan.length > 0) {
+                console.log('📋 PROJECT MANAGER: Execution plan created with', executionPlan.length, 'steps');
+                
+                for (const step of executionPlan) {
+                    console.log(`🔄 Executing Step ${step.step}: ${step.agent_to_use} - "${step.sub_task_query}"`);
                     
-                    // STEP 1: DECOMPOSITION - AI creates multi-step execution plan
-                    const executionPlan = await this.determineExecutionPlan(currentMessage, history, effectiveRestaurantId);
-                    console.log('📋 PROJECT MANAGER: Execution plan created with', executionPlan.length, 'steps');
+                    const stepResult = await this.executeAgent(
+                        step.agent_to_use, 
+                        step.sub_task_query, 
+                        history, 
+                        effectiveRestaurantId,
+                        sessionState.globalContext
+                    );
                     
-                    // Execute each step in the plan
-                    for (const step of executionPlan) {
-                        console.log(`🔄 Executing Step ${step.step}: ${step.agent_to_use} - "${step.sub_task_query}"`);
-                        
-                        const stepResult = await this.executeAgent(
-                            step.agent_to_use,
-                            step.sub_task_query,
-                            history,
-                            effectiveRestaurantId,
-                            this.conversationState.globalContext
-                        );
-                        
-                        console.log(`📊 Step ${step.step} result:`, stepResult);
-                        
-                        // Update delegation chain
-                        this.conversationState.delegationChain.push({
-                            agent: step.agent_to_use,
-                            message: step.sub_task_query,
-                            result: stepResult,
-                            timestamp: new Date().toISOString(),
-                            step: step.step
-                        });
-                        
-                        // Update global context
-                        if (stepResult.toolResult) {
-                            this.conversationState.globalContext[step.agent_to_use] = stepResult.toolResult;
-                            console.log(`🌐 Updated globalContext with ${step.agent_to_use} result`);
-                        }
-                        
-                        // Collect structured tool results
+                    console.log(`📊 Step ${step.step} result:`, stepResult);
+                    
+                    // Store tool result for Master Narrator consolidation
+                    if (stepResult.toolResult) {
                         allToolResults.push({
-                            tool: stepResult.toolResult?.tool || 'unknown',
                             agent: step.agent_to_use,
+                            tool: stepResult.toolName || 'unknown_tool',
                             data: stepResult.toolResult,
                             timestamp: stepResult.timestamp,
                             step: step.step,
                             query: step.sub_task_query
                         });
                         
-                        // Handle special response types (reservations, etc.)
-                        if (stepResult.type === 'redirect') {
-                            responseType = 'redirect';
-                            additionalData = { ...additionalData, ...stepResult };
+                        // Update global context in session state
+                        sessionState.globalContext[step.agent_to_use] = stepResult.toolResult;
+                        console.log('🌐 Updated session globalContext with', step.agent_to_use, 'result');
+                    }
+                    
+                    // CRITICAL: Check if agent is signaling that it's awaiting user response
+                    if (stepResult.contextData) {
+                        if (stepResult.contextData.isAwaitingUserResponse) {
+                            console.log('🔔 Agent signaled awaiting user response:', stepResult.contextData);
+                            sessionState.isAwaitingUserResponse = true;
+                            sessionState.nextAgent = stepResult.contextData.nextAgent;
+                            sessionState.flowState = { ...sessionState.flowState, ...stepResult.contextData.flowState };
+                            if (stepResult.contextData.activeFlow) {
+                                sessionState.activeFlow = stepResult.contextData.activeFlow;
+                            }
                         }
                     }
                     
-                    // All steps completed, exit the main loop
-                    currentMessage = null;
-                    nextAgentName = null;
-                    this.conversationState.activeAgent = null;
-                    console.log('✅ All decomposition steps completed');
+                    // Handle special response types (reservations, etc.)
+                    if (stepResult.type === 'redirect') {
+                        responseType = 'redirect';
+                        additionalData = { ...additionalData, ...stepResult };
+                    }
                 }
             }
             
@@ -232,11 +309,12 @@ class AgentOrchestrator {
                         type: 'redirect',
                         reservationDetails: formattedReservationDetails,
                         orchestrator: {
-                            architecture: 'hybrid-agency-v2',
-                            delegationChain: this.conversationState.delegationChain,
-                            totalAgentsInvolved: this.conversationState.delegationChain.length,
-                            finalAgent: this.conversationState.delegationChain[this.conversationState.delegationChain.length - 1]?.agent,
-                            globalContext: this.conversationState.globalContext,
+                            architecture: 'session-aware-hybrid-v3',
+                            sessionId: sessionId,
+                            delegationChain: sessionState.delegationChain,
+                            totalAgentsInvolved: sessionState.delegationChain.length,
+                            finalAgent: sessionState.delegationChain[sessionState.delegationChain.length - 1]?.agent,
+                            globalContext: sessionState.globalContext,
                             isConsolidated: false,
                             toolResultsCount: allToolResults.length,
                             timestamp: new Date().toISOString()
@@ -292,17 +370,22 @@ class AgentOrchestrator {
             }
 
             // Return comprehensive response with orchestration metadata
+                        // FINAL STEP: SAVE SESSION STATE
+            this.saveSessionState(sessionId, sessionState);
+            
+            // Return comprehensive response with orchestration metadata
             return {
                 response: masterResponse,
                 type: responseType,
                 ...additionalData,
                 orchestrator: {
-                    architecture: 'hybrid-agency-v2',
-                    delegationChain: this.conversationState.delegationChain,
-                    totalAgentsInvolved: this.conversationState.delegationChain.length,
-                    finalAgent: this.conversationState.delegationChain[this.conversationState.delegationChain.length - 1]?.agent,
-                    globalContext: this.conversationState.globalContext,
-                    isConsolidated: isConsolidated,
+                    architecture: 'session-aware-hybrid-v3',
+                    sessionId: sessionId,
+                    delegationChain: sessionState.delegationChain,
+                    totalAgentsInvolved: sessionState.delegationChain.length,
+                    finalAgent: sessionState.delegationChain[sessionState.delegationChain.length - 1]?.agent,
+                    globalContext: sessionState.globalContext,
+                    isConsolidated: false,
                     toolResultsCount: allToolResults.length,
                     timestamp: new Date().toISOString()
                 }
@@ -635,6 +718,56 @@ Respond with ONLY a JSON array in this exact format:
             isAwaitingUserResponse: false,
             nextAgent: null
         };
+    }
+
+    /**
+     * Reset only the awaiting state while preserving global context
+     */
+    resetAwaitingState() {
+        this.conversationState.isAwaitingUserResponse = false;
+        this.conversationState.nextAgent = null;
+        this.conversationState.activeFlow = null;
+        this.conversationState.flowState = {};
+        console.log('🔄 Awaiting state reset - preserving global context');
+    }
+
+    /**
+     * Determine if a message should bypass the awaiting state and go to specialized agents
+     * even when we're awaiting a user response in a booking flow
+     */
+    async shouldBypassAwaitingState(message) {
+        try {
+            // Use AI to intelligently determine if message should bypass awaiting state
+            const { getAiPlan } = await import('../AIService.js');
+            
+            const analysisPrompt = `Analyze this user message to determine if it should bypass the current booking flow and go to a specialized agent instead.
+
+USER MESSAGE: "${message}"
+
+CONTEXT: The system is currently waiting for the user to respond in a booking flow (like selecting a table type or providing contact details).
+
+Determine if this message is:
+1. A completely different request (menu questions, restaurant info, celebration planning)
+2. A modification to booking details (date/time changes, party size changes) 
+3. A continuation of the current booking flow (table selection, contact info)
+
+Respond with JSON:
+{
+  "shouldBypass": boolean,
+  "reason": "explanation",
+  "suggestedIntent": "menu|info|celebration|booking_modification|booking_continuation"
+}`;
+
+            const result = await getAiPlan(analysisPrompt, [], {}, null);
+            
+            return result?.shouldBypass || false;
+            
+        } catch (error) {
+            console.error('❌ Error in AI-based bypass analysis, using safe fallback:', error);
+            // Safe fallback: only bypass for very obvious non-booking messages
+            const lowerMessage = message.toLowerCase();
+            return lowerMessage.includes('menu') || lowerMessage.includes('hours') || lowerMessage.includes('address');
+        }
     }
 }
 

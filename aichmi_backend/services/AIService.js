@@ -515,12 +515,14 @@ ${paramDetails}`;
   
   return `You are an expert orchestrator for a restaurant AI. Your job is to analyze the user's message and the conversation state to choose the single best tool to call next.
 
-DATE/TIME CONTEXT (CRITICAL - Use these exact dates):
+DATE/TIME CONTEXT (Use ONLY when user mentions temporal references):
 - Today's date: ${today}
 - Tomorrow's date: ${tomorrow}
 - Current time: ${currentTime}
 - When user says "tomorrow", use: ${tomorrow}
 - When user says "today", use: ${today}
+- When user says "now" or "right now", use current time
+- When user provides NO date/time, ask for clarification instead of assuming
 
 TOOL SCHEMAS (Use these exact parameter names and formats):
 ${toolSchemas}
@@ -540,7 +542,7 @@ ROUTING RULES (CRITICAL - Follow these exactly):
 
 Rule 1 (State Continuation): If the conversation state shows I just asked a question (e.g., 'Which type would you prefer?'), and the user's message is a direct answer, your primary goal is to continue that flow. If you now have ALL necessary details (name, email, phone, date, time, partySize, tableType), call the create_reservation tool.
 
-Rule 2 (Booking Flow): Any NEW request containing a date, time, or party size must call the check_availability tool FIRST. This is non-negotiable - availability must always be checked before proceeding.
+Rule 2 (Booking Flow): Any NEW request containing EXPLICIT date, time, AND party size must call the check_availability tool FIRST. If the user only provides party size without date/time, use clarify_and_respond to ask for the missing information.
 
 Rule 3 (Context Modification): If the conversation state shows an active 'booking' flow and the user provides a new time (e.g., 'what about at 5pm?'), you must call the check_availability tool again with the updated time, carrying over the other details from the flowState.
 
@@ -550,7 +552,9 @@ Rule 5 (Restaurant Info): Use get_restaurant_info for questions about hours, add
 
 Rule 6 (Celebration Packages): Use get_celebration_packages for questions about celebrations, special occasions, birthday packages, anniversary setups, romantic celebrations, or any special event planning.
 
-Rule 7 (Fallback): Use clarify_and_respond ONLY when the user's request is ambiguous, out of scope, or you don't have enough information to call another tool.
+Rule 7 (Missing Information): Use clarify_and_respond when the user wants to make a reservation but hasn't provided complete booking details (date, time, AND party size). Ask specifically for the missing information.
+
+Rule 8 (Fallback): Use clarify_and_respond when the user's request is ambiguous, out of scope, or you don't have enough information to call another tool.
 
 PARAMETER FORMAT REQUIREMENTS:
 - For check_availability: Use YYYY-MM-DD for date, HH:MM for time (24-hour format), integer for partySize
@@ -937,4 +941,72 @@ function getFallbackPlan() {
       message: 'I need a bit more information to help you. Could you please clarify what you\'re looking for?'
     }
   };
+}
+
+/**
+ * AI-powered interruption detection for conversation flow management
+ * Determines if user message is a topic change rather than continuation
+ */
+export async function isInterruption(message) {
+  try {
+    console.log('🔍 AI Interruption Check:', message);
+    
+    const interruptionPrompt = `You are a conversation analyst. The AI is currently waiting for the user to provide a specific piece of information to continue a booking (e.g., choosing a table type or providing contact details).
+
+The user's latest message is: "${message}"
+
+Does this message appear to be a complete change of topic or an unrelated greeting, rather than an answer to the AI's previous question?
+
+Examples of INTERRUPTIONS (YES):
+- "hello" 
+- "what's your menu"
+- "what are your hours"
+- "can you tell me about your restaurant"
+- "actually never mind"
+
+Examples of CONTINUATIONS (NO):
+- "standard table please"
+- "anniversary table"
+- "grass table"
+- "my name is John"
+- "john@email.com"
+- "yes that works"
+- "no i meant tomorrow"
+
+Respond with ONLY a single word: YES or NO.`;
+
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+          contents: [
+            { role: "user", parts: [{ text: interruptionPrompt }] }
+          ]
+        })
+      }
+    );
+    
+    const data = await response.json();
+    const candidate = data?.candidates?.[0];
+    
+    if (!candidate?.content?.parts?.[0]?.text) {
+      console.error('❌ Invalid response from Gemini for interruption check:', data);
+      return false; // Safe default: assume continuation
+    }
+    
+    const aiResponse = candidate.content.parts[0].text.trim().toUpperCase();
+    const isInterruption = aiResponse === 'YES';
+    
+    console.log('🤖 AI Interruption Decision:', aiResponse, '→', isInterruption ? 'INTERRUPTION' : 'CONTINUATION');
+    return isInterruption;
+    
+  } catch (error) {
+    console.error('❌ Error in AI interruption check:', error);
+    return false; // Safe default: assume continuation
+  }
 }

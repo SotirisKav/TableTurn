@@ -19,7 +19,7 @@ class ReservationAgent extends BaseAgent {
         );
         
         // Define specialized tools for this agent
-        this.allowedTools = ['create_reservation', 'clarify_and_respond'];
+        this.allowedTools = ['create_reservation', 'clarify_and_respond', 'check_availability'];
     }
 
     /**
@@ -103,7 +103,8 @@ class ReservationAgent extends BaseAgent {
                 originalMessage, 
                 specificTask, 
                 history, 
-                globalContext
+                globalContext,
+                globalContext.flowState || {}  // Pass flowState from context
             );
             
             const { getAiPlan } = await import('../AIService.js');
@@ -140,12 +141,28 @@ class ReservationAgent extends BaseAgent {
     /**
      * Build the focused thinking prompt for reservation specialist
      */
-    buildFocusedThinkingPrompt(originalMessage, specificTask, history, globalContext) {
+    buildFocusedThinkingPrompt(originalMessage, specificTask, history, globalContext, flowState = {}) {
         const contextSummary = this.summarizeGlobalContext(globalContext);
         const recentHistory = history.slice(-3).map(h => `${h.sender}: ${h.text}`).join('\n');
         const availabilityInfo = this.extractAvailabilityFromContext(globalContext);
         
+        // CRITICAL: Extract booking context from globalContext.bookingContext or flowState
+        let bookingContext = 'No booking context available';
+        const contextData = globalContext.bookingContext || flowState;
+        
+        if (contextData && Object.keys(contextData).length > 0) {
+            const { date, time, partySize, availableTableTypes, restaurantId } = contextData;
+            bookingContext = `CURRENT BOOKING CONTEXT (restored from session):
+Date: ${date || 'Not specified'}
+Time: ${time || 'Not specified'} 
+Party Size: ${partySize || 'Not specified'} people
+Available Table Types: ${availableTableTypes ? JSON.stringify(availableTableTypes) : 'Not available'}
+Restaurant ID: ${restaurantId || 'Not specified'}`;
+        }
+        
         return `You are a reservation creation specialist agent. Your job is to analyze the user's request and choose the best tool from your limited tool belt.
+
+${bookingContext}
 
 GLOBAL CONTEXT (What other agents have already done):
 ${contextSummary}
@@ -162,25 +179,36 @@ RECENT CONVERSATION HISTORY:
 ${recentHistory || 'None'}
 
 CRITICAL DECISION RULES:
-1. Use create_reservation ONLY if you have ALL required details: name, email, phone, date, time, partySize, tableType
-2. Use clarify_and_respond if ANY required detail is missing
-3. Check the global context and conversation history to see what details have been collected
-4. If availability hasn't been checked or table type hasn't been selected, ask for that first
+1. **Context Analysis**: Check the CURRENT BOOKING CONTEXT above for existing reservation details (date, time, party size, available table types).
+
+2. **Booking Stage Detection**: 
+   - If context shows complete booking details but user message is "Continue with the booking process" or similar, this is a RESUME scenario. Ask them to select their preferred table type.
+   - If user is selecting a table type (e.g., "standard", "anniversary", "grass"), you have booking details from context but need contact info.
+   - If user is providing contact info (name, email, phone), prepare for final reservation creation.
+
+3. **Date/Time Modifications**: If user says "no i meant tomorrow" or similar date/time changes, use check_availability tool with the modified date/time and existing party size.
+
+4. **Table Selection**: If user selects a table type and you have all booking details from context, use clarify_and_respond to ask for their contact information (name, email, phone).
+
+5. **Final Reservation**: Use create_reservation ONLY when you have ALL required details: name, email, phone, date, time, partySize, tableType.
+
+6. **Missing Information**: Use clarify_and_respond if ANY required detail is missing from both the user message AND the booking context.
 
 REQUIRED FIELDS FOR create_reservation:
 - name (customer's full name)
 - email (customer's email) 
 - phone (customer's phone number)
-- date (YYYY-MM-DD format)
-- time (HH:MM format)
-- partySize (number of people)
-- tableType (must match available table types from availability check)
+- date (YYYY-MM-DD format) - CHECK BOOKING CONTEXT
+- time (HH:MM format) - CHECK BOOKING CONTEXT  
+- partySize (number of people) - CHECK BOOKING CONTEXT
+- tableType (must match available table types from availability check) - CHECK USER MESSAGE
 
 INSTRUCTIONS:
-1. Analyze if ALL required fields are available from the context and conversation
-2. If yes, use create_reservation with all the collected details
-3. If no, use clarify_and_respond to ask for missing information
-4. Do NOT create a reservation without complete information
+1. First check the BOOKING CONTEXT for date, time, partySize - these may already be available
+2. If user is selecting a table type, extract it from their message (e.g., "standard", "anniversary", "grass")
+3. If you have date, time, partySize, tableType but missing contact info, use clarify_and_respond to ask for name, email, phone
+4. If you have ALL required fields, use create_reservation immediately
+5. Do NOT create a reservation without complete information
 
 Respond ONLY with a JSON object: { "tool_to_call": "...", "parameters": {...} }`;
     }
@@ -256,6 +284,9 @@ Respond ONLY with a JSON object: { "tool_to_call": "...", "parameters": {...} }`
                 case 'clarify_and_respond':
                     return await this.executeClarifyAndRespond(parameters);
                     
+                case 'check_availability':
+                    return await this.executeCheckAvailability(parameters, restaurantId);
+                    
                 default:
                     console.error('❌ Unknown tool for ReservationAgent:', toolName);
                     return {
@@ -322,6 +353,75 @@ Respond ONLY with a JSON object: { "tool_to_call": "...", "parameters": {...} }`
             
         } catch (error) {
             console.error('❌ Error creating reservation:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Execute check_availability tool - for handling date/time modifications
+     */
+    async executeCheckAvailability(params, restaurantId) {
+        try {
+            console.log('🔍 ReservationAgent checking availability:', params);
+            
+            // Import RestaurantService for availability checking
+            const { default: RestaurantService } = await import('../RestaurantService.js');
+            
+            // Pre-check: Verify party size doesn't exceed restaurant's maximum table capacity
+            const maxCapacity = await RestaurantService.getMaxTableCapacity(restaurantId);
+            if (params.partySize > maxCapacity) {
+                return {
+                    success: true,
+                    available: false,
+                    message: `Sorry, we can only accommodate up to ${maxCapacity} people. Your party size of ${params.partySize} exceeds our maximum table capacity.`,
+                    date: params.date,
+                    time: params.time,
+                    partySize: params.partySize,
+                    reason: 'exceeds_capacity'
+                };
+            }
+            
+            // Get available table types for the specific time
+            const availableTableTypes = await RestaurantService.getAvailableTableTypesForTime({
+                restaurantId: restaurantId,
+                reservationDate: params.date,
+                reservationTime: params.time,
+                guests: params.partySize
+            });
+            
+            if (availableTableTypes && availableTableTypes.length > 0) {
+                // Format table options for the AI response
+                const tableOptions = availableTableTypes.map(t => ({
+                    tableType: t.table_type,
+                    price: t.table_price || '0.00',
+                    capacity: t.capacity
+                }));
+                
+                return {
+                    success: true,
+                    available: true,
+                    availableTableTypes: tableOptions,
+                    hasMultipleTableTypes: tableOptions.length > 1,
+                    date: params.date,
+                    time: params.time,
+                    partySize: params.partySize
+                };
+            } else {
+                return {
+                    success: true,
+                    available: false,
+                    message: `No tables available for ${params.partySize} people on ${params.date} at ${params.time}`,
+                    date: params.date,
+                    time: params.time,
+                    partySize: params.partySize
+                };
+            }
+            
+        } catch (error) {
+            console.error('❌ Error checking availability in ReservationAgent:', error);
             return {
                 success: false,
                 error: error.message
