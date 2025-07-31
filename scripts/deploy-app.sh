@@ -41,6 +41,7 @@ npm run build
 echo -e "${BLUE}📋 Copying frontend to backend...${NC}"
 cd "$PROJECT_ROOT/aichmi_backend"
 rm -rf public/*
+mkdir -p public
 cp -r ../aichmi_frontend/dist/* public/
 
 # Install backend dependencies
