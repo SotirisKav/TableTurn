@@ -135,6 +135,32 @@ export const TOOL_DEFINITIONS = {
     }
   },
 
+  get_celebration_packages: {
+    name: "get_celebration_packages",
+    description: "Retrieve celebration packages and special occasion services available at the restaurant. Use this when users ask about celebrations, special occasions, birthday packages, anniversary setups, or romantic celebrations.",
+    parameters: {
+      type: "object",
+      properties: {
+        occasion_tags: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["birthday", "anniversary", "romantic", "proposal", "celebration", "special_occasion"]
+          },
+          description: "Tags for the type of celebration or special occasion",
+          default: []
+        },
+        budget_range: {
+          type: "string",
+          description: "Budget range for the celebration package",
+          enum: ["budget", "standard", "premium", "luxury"],
+          default: "standard"
+        }
+      },
+      required: []
+    }
+  },
+
   clarify_and_respond: {
     name: "clarify_and_respond",
     description: "Use this tool ONLY when the user's request is ambiguous, out of scope, or you do not have enough information to call another tool. It is used to ask a clarifying question, provide general information, or politely handle requests that cannot be fulfilled by other tools.",

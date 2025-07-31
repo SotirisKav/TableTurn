@@ -507,7 +507,20 @@ function buildPlanningPrompt(message, history, conversationState, restaurantId) 
 ${paramDetails}`;
     }).join('\n\n');
   
+  // Get current date information
+  const now = new Date();
+  const today = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
+  
   return `You are an expert orchestrator for a restaurant AI. Your job is to analyze the user's message and the conversation state to choose the single best tool to call next.
+
+DATE/TIME CONTEXT (CRITICAL - Use these exact dates):
+- Today's date: ${today}
+- Tomorrow's date: ${tomorrow}
+- Current time: ${currentTime}
+- When user says "tomorrow", use: ${tomorrow}
+- When user says "today", use: ${today}
 
 TOOL SCHEMAS (Use these exact parameter names and formats):
 ${toolSchemas}
@@ -533,9 +546,11 @@ Rule 3 (Context Modification): If the conversation state shows an active 'bookin
 
 Rule 4 (Menu Queries): Use get_menu_items for any food, dish, menu, dietary, or price-related questions.
 
-Rule 5 (Restaurant Info): Use get_restaurant_info for questions about hours, address, location, or general restaurant information.
+Rule 5 (Restaurant Info): Use get_restaurant_info for questions about hours, address, location, owner information, contact details, or general restaurant information.
 
-Rule 6 (Fallback): Use clarify_and_respond ONLY when the user's request is ambiguous, out of scope, or you don't have enough information to call another tool.
+Rule 6 (Celebration Packages): Use get_celebration_packages for questions about celebrations, special occasions, birthday packages, anniversary setups, romantic celebrations, or any special event planning.
+
+Rule 7 (Fallback): Use clarify_and_respond ONLY when the user's request is ambiguous, out of scope, or you don't have enough information to call another tool.
 
 PARAMETER FORMAT REQUIREMENTS:
 - For check_availability: Use YYYY-MM-DD for date, HH:MM for time (24-hour format), integer for partySize
@@ -560,25 +575,51 @@ Do NOT include any explanatory text before or after the JSON. Only return the JS
  * Build the response generation prompt
  */
 function buildResponsePrompt(userMessage, toolResult, toolName, restaurantName) {
-  const toolContext = formatToolResultForPrompt(toolResult, toolName);
-  
-  return `You are a friendly and helpful AI host${restaurantName ? ` for ${restaurantName}` : ''}. The user asked: "${userMessage}"
+  // Special handling for master narrator consolidation - use the stricter approach
+  if (toolName === 'master_narrator_consolidation') {
+    return `You are a helpful AI assistant. Your ONLY job is to translate the provided "Tool Result" into a natural, human-readable response.
 
-My system ran the ${toolName} tool and found the following data:
-${toolContext}
+**CRITICAL RULE: You MUST base your response exclusively on the information within the "Tool Result" section. Do not use any prior knowledge. Do not answer the user's original question if the tool result indicates it cannot be answered.**
 
-Based on these facts, formulate a natural, helpful, and conversational response. 
+**CRITICAL RULE: Your primary goal is to directly answer the user's original question using the factual data provided in the 'Tool Result'. If the user asks a specific yes/no question (e.g., 'Are the lamb chops gluten-free?'), and the tool result provides the necessary information to answer it, you must answer with a direct 'Yes' or 'No' before providing any additional, related information. For example, if the tool result shows the lamb chops are not gluten-free, the correct response is: 'No, our lamb chops are not gluten-free. However, if you are looking for a gluten-free option, I can recommend...'.**
 
-IMPORTANT INSTRUCTIONS:
-- Be warm and conversational, like a friendly restaurant host
-- Use the factual data provided - don't make up information
-- Keep responses concise but helpful
-- If the tool was check_availability and multiple table types were found, you MUST ask the user which they would prefer
-- If the tool was create_reservation and it succeeded, congratulate them and confirm the details
-- If there were errors or no results, be helpful and suggest alternatives
-- Always maintain a positive, helpful tone
+User's Original Question: "${userMessage}"
 
-Respond naturally as if you're speaking directly to the customer:`;
+--- TOOL RESULT (The Ground Truth) ---
+${JSON.stringify(toolResult, null, 2)}
+--- END OF TOOL RESULT ---
+
+Now, based ONLY on the Tool Result, formulate the final response to the user.
+
+Examples:
+- If the Tool Result contains { success: true, message: 'I am sorry, I cannot provide owner information.' }, your response MUST be: "I am sorry, I cannot provide owner information."
+- If the Tool Result is { success: true, available: true, availableTableTypes: [...] }, your response should be: "Great news! We have tables available..."
+- If the Tool Result is { success: false, error: '...' }, your response MUST be: "I'm sorry, an error occurred while processing your request."
+
+CRITICAL: If the tool result says it cannot provide information or gives an error message, you MUST convey that exact limitation. Do not invent or supplement information.`;
+  }
+
+  // For regular tools, also use the stricter approach
+  return `You are a helpful AI assistant. Your ONLY job is to translate the provided "Tool Result" into a natural, human-readable response.
+
+**CRITICAL RULE: You MUST base your response exclusively on the information within the "Tool Result" section. Do not use any prior knowledge. Do not answer the user's original question if the tool result indicates it cannot be answered.**
+
+**CRITICAL RULE: Your primary goal is to directly answer the user's original question using the factual data provided in the 'Tool Result'. If the user asks a specific yes/no question (e.g., 'Are the lamb chops gluten-free?'), and the tool result provides the necessary information to answer it, you must answer with a direct 'Yes' or 'No' before providing any additional, related information. For example, if the tool result shows the lamb chops are not gluten-free, the correct response is: 'No, our lamb chops are not gluten-free. However, if you are looking for a gluten-free option, I can recommend...'.**
+
+User's Original Question: "${userMessage}"
+
+--- TOOL RESULT (The Ground Truth) ---
+${JSON.stringify(toolResult, null, 2)}
+--- END OF TOOL RESULT ---
+
+Now, based ONLY on the Tool Result, formulate the final response to the user.
+
+Examples:
+- If the Tool Result contains { success: true, message: 'I am sorry, I cannot provide owner information.' }, your response MUST be: "I am sorry, I cannot provide owner information."
+- If the Tool Result is { success: true, available: true, availableTableTypes: [...] }, your response should be: "Great news! We have tables available..."
+- If the Tool Result is { success: false, error: '...' }, your response MUST be: "I'm sorry, an error occurred while processing your request."
+
+CRITICAL: If the tool result says it cannot provide information or gives an error message, you MUST convey that exact limitation. Do not invent or supplement information.`;
 }
 
 /**
@@ -596,22 +637,293 @@ function formatToolResultForPrompt(toolResult, toolName) {
       
     case 'get_menu_items':
       if (toolResult.items && toolResult.items.length > 0) {
-        return `Found ${toolResult.items.length} menu items: ${toolResult.items.map(item => `${item.name} (€${item.price})`).slice(0, 5).join(', ')}`;
+        const formattedItems = toolResult.items.slice(0, 8).map(item => 
+          `${item.name} (€${item.price}) - ${item.description}`
+        ).join('\n');
+        return `Found ${toolResult.items.length} menu items:
+${formattedItems}`;
       }
       return 'No menu items found matching the request';
       
     case 'get_restaurant_info':
-      return `Restaurant information: ${JSON.stringify(toolResult, null, 2)}`;
-      
+      if (toolResult.success && toolResult.restaurant) {
+        const restaurant = toolResult.restaurant;
+        let info = `Restaurant: ${restaurant.name}
+`;
+        
+        if (restaurant.owner_name) {
+          info += `Owner: ${restaurant.owner_name}
+`;
+          if (restaurant.owner_phone) info += `Owner Phone: ${restaurant.owner_phone}
+`;
+          if (restaurant.owner_email) info += `Owner Email: ${restaurant.owner_email}
+`;
+        }
+        
+        if (restaurant.address) info += `Address: ${restaurant.address}
+`;
+        if (restaurant.phone) info += `Phone: ${restaurant.phone}
+`;
+        if (restaurant.email) info += `Email: ${restaurant.email}
+`;
+        if (restaurant.description) info += `Description: ${restaurant.description}
+`;
+        
+        if (toolResult.hours && toolResult.hours.length > 0) {
+          info += `Hours:
+`;
+          toolResult.hours.forEach(h => {
+            info += `  ${h.day_of_week}: ${h.open_time} - ${h.close_time}
+`;
+          });
+        }
+        
+        return info.trim();
+      }
+      return 'Restaurant information not available';
     case 'create_reservation':
       if (toolResult.success) {
         return `Reservation created successfully. Confirmation ID: ${toolResult.reservationDetails?.reservationId || 'N/A'}`;
       }
       return `Reservation failed: ${toolResult.error || 'Unknown error'}`;
       
+    case 'get_celebration_packages':
+      if (toolResult.success && toolResult.packages) {
+        const packageList = toolResult.packages.map(pkg => `${pkg.name} (€${pkg.price}) - ${pkg.description}`).join(', ');
+        return `Found ${toolResult.packages.length} celebration packages: ${packageList}`;
+      }
+      return 'No celebration packages found';
+      
+    case 'master_narrator_consolidation':
+      // NEW: Master narrator consolidation with multiple tool results + conversation context
+      if (toolResult.allToolResults && toolResult.allToolResults.length > 0) {
+        const formattedResults = toolResult.allToolResults.map((result, index) => {
+          let summary = '';
+          const data = result.data;
+          
+          if (data && data.success) {
+            if (data.available !== undefined) {
+              // Availability check result
+              if (data.available && data.availableTableTypes) {
+                const tableOptions = data.availableTableTypes.map(t => 
+                  `${t.tableType} table (€${t.price || 0})`
+                ).join(', ');
+                summary = `Availability: ${tableOptions} available for ${data.partySize} people on ${data.date} at ${data.time}`;
+              } else {
+                summary = `Availability: No tables available for the requested time`;
+              }
+            } else if (data.selectedTableType && data.bookingContext) {
+              // Table selection result
+              const context = data.bookingContext;
+              summary = `Table Selection: User chose ${data.selectedTableType} table for ${context.partySize} people on ${context.date} at ${context.time}. ${data.needsContactInfo ? 'Contact info needed to complete reservation.' : ''}`;
+            } else if (data.items && data.items.length > 0) {
+              // Menu search result
+              const mostExpensive = data.items.reduce((max, item) => 
+                parseFloat(item.price) > parseFloat(max.price) ? item : max
+              );
+              summary = `Menu: Found ${data.items.length} items. Most expensive: ${mostExpensive.name} (€${mostExpensive.price})`;
+            } else if (data.message && data.responseType === 'clarification') {
+              // Clarification request
+              summary = `Clarification: ${data.message}`;
+            } else if (data.packages && data.packages.length > 0) {
+              // Celebration packages
+              summary = `Celebrations: Found ${data.packages.length} celebration packages`;
+            } else if (data.restaurant) {
+              // Restaurant info
+              const restaurant = data.restaurant;
+              let infoDetails = [];
+              
+              if (restaurant.owner_name) {
+                infoDetails.push(`Owner: ${restaurant.owner_name}`);
+                if (restaurant.owner_phone) infoDetails.push(`Owner Phone: ${restaurant.owner_phone}`);
+                if (restaurant.owner_email) infoDetails.push(`Owner Email: ${restaurant.owner_email}`);
+              }
+              
+              if (restaurant.address) infoDetails.push(`Address: ${restaurant.address}`);
+              if (restaurant.phone) infoDetails.push(`Phone: ${restaurant.phone}`);
+              if (restaurant.email) infoDetails.push(`Email: ${restaurant.email}`);
+              
+              // Add hours information if available in the result
+              if (result.data.hours && result.data.hours.length > 0) {
+                const hoursSummary = result.data.hours.map(h => `${h.day_of_week}: ${h.open_time}-${h.close_time}`).join(', ');
+                infoDetails.push(`Hours: ${hoursSummary}`);
+              }
+              
+              summary = `Restaurant Info: ${restaurant.name} - ${infoDetails.join(', ')}`;
+            } else {
+              summary = `${result.agent}: Task completed successfully`;
+            }
+          } else {
+            summary = `${result.agent}: ${data?.error || 'Task failed'}`;
+          }
+          
+          return `${index + 1}. ${summary}`;
+        }).join('\n');
+        
+        // Add conversation history context
+        let historyContext = '';
+        if (toolResult.conversationHistory && toolResult.conversationHistory.length > 0) {
+          const recentHistory = toolResult.conversationHistory.slice(-4).map(msg => 
+            `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
+          ).join('\n');
+          historyContext = `\n\nCONVERSATION CONTEXT:\n${recentHistory}`;
+        }
+        
+        return `Agent Results:\n${formattedResults}\n\nQuery type: ${toolResult.queryType}\nAgents involved: ${toolResult.agentCount}${historyContext}`;
+      }
+      return 'No agent results to consolidate';
+      
     default:
       return JSON.stringify(toolResult, null, 2);
   }
+}
+
+/**
+ * NEW ARCHITECTURE: The "Consolidation" Call
+ * 
+ * This function takes multiple tool results and synthesizes them into a single,
+ * natural-sounding response. This eliminates the repetitive, appended responses
+ * problem and creates human-like conversation flow.
+ * 
+ * @param {string} originalQuery - The user's complete original message
+ * @param {Array} toolResults - Array of tool results from different agents
+ * @param {number} restaurantId - Current restaurant ID
+ * @returns {Promise<Object>} - Consolidated natural response
+ */
+export async function consolidateFinalResponse(originalQuery, toolResults, restaurantId = null) {
+  try {
+    console.log('🎭 CONSOLIDATION: Synthesizing results into natural response');
+    console.log('🎭 Original query:', originalQuery);
+    console.log('🎭 Tool results count:', toolResults.length);
+    
+    // If only one result, return it as-is (no consolidation needed)
+    if (toolResults.length === 1) {
+      return {
+        response: toolResults[0].response,
+        type: 'message',
+        consolidated: false
+      };
+    }
+    
+    // Get restaurant info for context
+    let restaurantName = null;
+    if (restaurantId) {
+      const restaurant = await RestaurantService.getRestaurantById(restaurantId);
+      if (restaurant) restaurantName = restaurant.name;
+    }
+    
+    // Build the consolidation prompt
+    const consolidationPrompt = buildConsolidationPrompt(
+      originalQuery, 
+      toolResults, 
+      restaurantName
+    );
+    
+    // Call Gemini with the consolidation prompt
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+          contents: [
+            { role: "user", parts: [{ text: consolidationPrompt }] }
+          ]
+        })
+      }
+    );
+    
+    const data = await response.json();
+    const candidate = data?.candidates?.[0];
+    
+    if (!candidate?.content?.parts?.[0]?.text) {
+      console.error('❌ Invalid response from Gemini for consolidation:', data);
+      // Fallback to concatenated responses
+      return {
+        response: toolResults.map(r => r.response).join('\n\n'),
+        type: 'message',
+        consolidated: false
+      };
+    }
+    
+    const consolidatedResponse = candidate.content.parts[0].text.trim();
+    console.log('✅ Consolidated response generated');
+    
+    return {
+      response: consolidatedResponse,
+      type: 'message',
+      consolidated: true
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in response consolidation:', error);
+    // Fallback to concatenated responses
+    return {
+      response: toolResults.map(r => r.response).join('\n\n'),
+      type: 'message',
+      consolidated: false
+    };
+  }
+}
+
+/**
+ * Build the consolidation prompt
+ */
+function buildConsolidationPrompt(originalQuery, toolResults, restaurantName) {
+  // Get current date information for response context
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  // Format tool results for the prompt
+  const formattedResults = toolResults.map((result, index) => {
+    let formattedData = '';
+    
+    if (result.tool === 'check_availability' && result.data.available) {
+      const tableOptions = result.data.availableTableTypes || [];
+      formattedData = `Availability Check Result: ${tableOptions.map(t => 
+        `${t.tableType} tables (€${t.price || 0})`
+      ).join(', ')} are available for the requested time.`;
+    } else if (result.tool === 'get_menu_items' && result.data.items) {
+      // Find the most expensive item
+      const mostExpensive = result.data.items.reduce((max, item) => 
+        parseFloat(item.price) > parseFloat(max.price) ? item : max
+      );
+      formattedData = `Menu Search Result: The most expensive dish is the '${mostExpensive.name}' at €${mostExpensive.price}.`;
+    } else {
+      formattedData = `${result.agent} Result: ${result.response}`;
+    }
+    
+    return `${index + 1}. ${formattedData}`;
+  }).join('\n');
+  
+  return `You are a master AI assistant${restaurantName ? ` for ${restaurantName}` : ''}. Your job is to synthesize the results from multiple internal tools into a single, cohesive, and natural-sounding response.
+
+DATE CONTEXT:
+- Today's date: ${today}
+- Tomorrow's date: ${tomorrow}
+- When referring to "tomorrow", use: ${tomorrow}
+- When referring to "today", use: ${today}
+
+USER'S ORIGINAL COMPLETE QUERY: "${originalQuery}"
+
+FACTUAL RESULTS FROM MY INTERNAL SYSTEMS:
+${formattedResults}
+
+CONSOLIDATION RULES:
+1. Create ONE natural, flowing response that addresses the user's complete query
+2. First address the primary task (usually availability/booking) and ask for the user's choice if needed
+3. Then seamlessly provide answers to any secondary questions without repetitive phrases
+4. If asking the user to choose from options, make it clear and conversational
+5. Use ONLY the factual data provided - never make up information
+6. Keep the tone warm, friendly, and professional like a restaurant host
+7. Avoid repetitive phrases like "let me check" or "okay, let me..."
+8. Make it sound like something a human would naturally say in one response
+
+Generate the perfect, consolidated response:`;
 }
 
 /**

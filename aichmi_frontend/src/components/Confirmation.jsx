@@ -43,9 +43,6 @@ function Confirmation() {
             {!state.restaurantName && (
               <p>Your table has been successfully booked.</p>
             )}
-            {state.reservationId && (
-              <p className="reservation-id">Reservation ID: <strong>#{state.reservationId}</strong></p>
-            )}
           </div>
 
           <div className="reservation-summary">
