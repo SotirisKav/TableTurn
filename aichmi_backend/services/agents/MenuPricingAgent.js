@@ -1,342 +1,538 @@
 /**
- * Menu & Pricing Agent
- * Specializes in menu information, dish details, pricing, and dietary options
+ * Menu & Pricing Agent - Hybrid "Agency" Architecture
+ * 
+ * UPGRADED IMPLEMENTATION: This agent now implements the "Think -> Act -> Speak" pattern
+ * using specialized menu and dietary tools. It can handle complex food queries and hand off 
+ * unrelated parts to other agents while maintaining perfect accuracy in its culinary domain.
  */
 
 import BaseAgent from './BaseAgent.js';
-import RestaurantService from '../RestaurantService.js';
+import { getAiPlan, generateSpokenResponse } from '../AIService.js';
+import { validateToolParameters } from '../ToolService.js';
 import RAGService from '../RAGService.js';
+import RestaurantService from '../RestaurantService.js';
 
 class MenuPricingAgent extends BaseAgent {
     constructor() {
         super(
             'MenuPricingAgent',
             'Menu & Pricing Specialist',
-            ['menu', 'food', 'dish', 'price', 'cost', 'diet', 'cuisine']
+            ['menu', 'food', 'dish', 'price', 'cost', 'diet', 'cuisine', 'wine', 'drink', 'vegetarian', 'vegan', 'gluten']
         );
+        
+        // Define specialized tools for this agent
+        this.allowedTools = ['get_menu_items', 'clarify_and_respond'];
     }
 
-    async processMessage(message, history, restaurantId, context) {
+    /**
+     * HYBRID ARCHITECTURE: Think -> Act -> Speak Loop
+     * 
+     * This agent implements the two-call model within its specialized culinary domain:
+     * 1. THINK: AI analyzes the message and selects the best tool from allowedTools
+     * 2. ACT: Execute the selected tool with validated parameters
+     * 3. SPEAK: AI generates a natural response based on tool results
+     * 
+     * Additionally, it analyzes if parts of the query are outside its scope
+     * and provides handoff information to the orchestrator.
+     */
+    async processMessage(message, history = [], restaurantId = null, context = {}) {
         try {
-            console.log(`🍽️ ${this.name} processing:`, message);
-
-            // Use RAG to retrieve relevant data
-            const ragData = await this.retrieveRAGData(message, restaurantId);
+            console.log(`🍽️ ${this.name} processing with Think->Act->Speak:`, message);
             
-            // Check if query requires hybrid menu search (dietary restrictions, specific dish types)
-            const dietaryFilters = this.extractDietaryFilters(message);
-            const requiresHybridSearch = Object.keys(dietaryFilters).length > 0 || 
-                                       this.hasSpecificMenuQuery(message);
+            const effectiveRestaurantId = restaurantId || 1;
             
-            // Perform hybrid menu search if needed using the new generic hybridSearch
-            let hybridMenuResults = [];
-            if (requiresHybridSearch) {
-                console.log('🔍 Performing hybrid menu search with filters:', dietaryFilters);
-                
-                // Add restaurant_id to filters to ensure we only get results from this restaurant
-                const searchFilters = { 
-                    restaurant_id: restaurantId, 
-                    ...dietaryFilters 
+            // ANALYZE QUERY SCOPE: Detect if message contains non-menu queries
+            const queryAnalysis = this.analyzeQueryScope(message);
+            console.log('📋 Query analysis:', queryAnalysis);
+            
+            // STEP 1: THINK - AI selects the best tool for the menu part
+            console.log('🧠 STEP 1: THINK - Getting AI plan for menu query...');
+            const toolPlan = await this.getContextAwarePlan(
+                message,
+                queryAnalysis.menuQuery, 
+                history, 
+                context.globalContext || {},
+                effectiveRestaurantId
+            );
+            
+            console.log('🎯 AI selected tool:', toolPlan.tool_to_call, 'with parameters:', toolPlan.parameters);
+            
+            // Validate that the selected tool is allowed for this agent
+            if (!this.allowedTools.includes(toolPlan.tool_to_call)) {
+                console.warn(`⚠️ AI selected disallowed tool ${toolPlan.tool_to_call}, falling back to clarify_and_respond`);
+                toolPlan.tool_to_call = 'clarify_and_respond';
+                toolPlan.parameters = {
+                    message: 'I specialize in menu items and food. Let me help you with that first.'
                 };
-                
-                // Use the new generic hybridSearch method
-                hybridMenuResults = await RAGService.hybridSearch(
-                    message, 
-                    'menu_item', 
-                    searchFilters, 
-                    10  // Get top 10 results
-                );
-                
-                if (hybridMenuResults.length > 0) {
-                    console.log(`✅ Found ${hybridMenuResults.length} hybrid menu matches`);
-                    hybridMenuResults.forEach(item => {
-                        console.log(`   - ${item.name} (score: ${item.relevanceScore.toFixed(3)}, price: ${item.price}€)`);
-                    });
-                }
             }
             
-            // Fetch menu and pricing data (still needed for system prompt)
-            const menuData = await this.fetchMenuData(restaurantId);
+            // STEP 2: ACT - Execute the selected tool
+            console.log('⚡ STEP 2: ACT - Executing tool...');
+            const toolResult = await this.executeTool(toolPlan.tool_to_call, toolPlan.parameters, effectiveRestaurantId);
             
-            // Add hybrid search results to menu data
-            if (hybridMenuResults.length > 0) {
-                menuData.hybridResults = hybridMenuResults;
-                menuData.hasHybridMatch = true;
-                menuData.appliedFilters = dietaryFilters;
+            console.log('📊 Tool result:', toolResult);
+            
+            // REMOVED: STEP 3: SPEAK - Agent now returns data only, no response generation
+            console.log('📊 Silent Data Collection: Returning tool result only...');
+            
+            // DETERMINE TASK COMPLETION AND HANDOFF
+            const taskCompletionAnalysis = this.analyzeTaskCompletion(message, queryAnalysis, toolResult);
+            
+            // Build silent data collector response object (NO response text)
+            const agentResponse = {
+                toolResult: toolResult, // The raw, factual data from the "Act" step
+                isTaskComplete: taskCompletionAnalysis.isComplete,
+                agent: this.name,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Add handoff information if task is incomplete
+            if (!taskCompletionAnalysis.isComplete) {
+                agentResponse.handoffSuggestion = taskCompletionAnalysis.suggestedAgent;
+                agentResponse.unansweredQuery = taskCompletionAnalysis.remainingQuery;
+                
+                console.log('🔀 Task incomplete, suggesting handoff to:', taskCompletionAnalysis.suggestedAgent);
+                console.log('🔀 Remaining query:', taskCompletionAnalysis.remainingQuery);
             }
             
-            // Check if user is asking about reservations (suggest delegation to ReservationAgent)
-            if (this.shouldDelegateToReservation(message)) {
-                console.log('🔄 Delegating reservation query portion to ReservationAgent');
+            return agentResponse;
+            
+        } catch (error) {
+            console.error(`❌ ${this.name} error:`, error);
+            return {
+                toolResult: {
+                    success: false,
+                    error: error.message
+                },
+                isTaskComplete: true,
+                agent: this.name
+            };
+        }
+    }
+
+    /**
+     * PHASE 2: Context-Aware and Focused Planning for Menu Specialist
+     */
+    async getContextAwarePlan(originalMessage, specificTask, history, globalContext, restaurantId) {
+        try {
+            console.log('🧠 Context-aware planning for MenuPricingAgent...');
+            console.log('🌐 Global context available:', Object.keys(globalContext));
+            
+            const focusedPrompt = this.buildFocusedThinkingPrompt(
+                originalMessage, 
+                specificTask, 
+                history, 
+                globalContext
+            );
+            
+            const { getAiPlan } = await import('../AIService.js');
+            const toolPlan = await getAiPlan(
+                focusedPrompt,
+                [],
+                { allowedTools: this.allowedTools },
+                restaurantId
+            );
+            
+            if (!this.allowedTools.includes(toolPlan.tool_to_call)) {
+                console.warn(`⚠️ AI selected disallowed tool ${toolPlan.tool_to_call}, falling back to clarify_and_respond`);
                 return {
-                    type: 'delegation',
-                    delegateTo: 'ReservationAgent',
-                    originalQuery: message,
-                    context: {
-                        ...context,
-                        delegatedFromAgent: 'MenuPricingAgent',
-                        menuContext: menuData
+                    tool_to_call: 'clarify_and_respond',
+                    parameters: {
+                        message: 'I specialize in menu items and food. Let me help you with that first.'
                     }
                 };
             }
             
-            // Build system prompt - check for ongoing reservation context
-            const systemPrompt = this.buildSystemPrompt(menuData, context);
+            return toolPlan;
             
-            // Build conversation context
-            const conversationHistory = this.buildConversationHistory(history);
-            
-            // Create full prompt
-            const fullPrompt = this.buildPrompt(message, conversationHistory, menuData, context);
-            
-            // Generate response with RAG context
-            const aiResponse = await this.generateResponse(fullPrompt, systemPrompt, ragData);
-            
-            // Check if there's an ongoing reservation that was interrupted
-            if (this.hasOngoingReservation(context, history)) {
-                const enhancedResponse = this.enhanceResponseWithReservationPrompt(aiResponse);
-                return this.formatResponse(enhancedResponse);
+        } catch (error) {
+            console.error('❌ Error in context-aware planning:', error);
+            return {
+                tool_to_call: 'clarify_and_respond',
+                parameters: {
+                    message: 'I need more information to help you with menu items.'
+                }
+            };
+        }
+    }
+
+    /**
+     * Build the focused thinking prompt for menu specialist
+     */
+    buildFocusedThinkingPrompt(originalMessage, specificTask, history, globalContext) {
+        const contextSummary = this.summarizeGlobalContext(globalContext);
+        const recentHistory = history.slice(-3).map(h => `${h.sender}: ${h.text}`).join('\n');
+        
+        return `You are a menu specialist agent. Your job is to analyze the user's request and choose the best tool from your limited tool belt.
+
+GLOBAL CONTEXT (What other agents have already done):
+${contextSummary}
+
+USER'S FULL ORIGINAL REQUEST: "${originalMessage}"
+
+YOUR SPECIFIC TASK: "${specificTask}"
+
+YOUR ALLOWED TOOLS: ${JSON.stringify(this.allowedTools)}
+
+RECENT CONVERSATION HISTORY:
+${recentHistory || 'None'}
+
+INSTRUCTIONS:
+1. Analyze YOUR SPECIFIC TASK in the context of the user's full request and the global context
+2. Choose the single best tool from YOUR ALLOWED TOOLS to accomplish your specific task
+3. Do NOT attempt to handle parts of the query that are outside your scope (like availability or celebrations)
+4. If other agents have already handled related parts, focus on what's missing for menu information
+5. Use get_menu_items for any request involving food, dishes, dietary requirements, or menu pricing
+6. Use clarify_and_respond only if you need more information for menu searching
+
+Respond ONLY with a JSON object: { "tool_to_call": "...", "parameters": {...} }`;
+    }
+
+    /**
+     * Summarize what other agents have already accomplished
+     */
+    summarizeGlobalContext(globalContext) {
+        if (!globalContext || Object.keys(globalContext).length === 0) {
+            return 'No other agents have processed this request yet.';
+        }
+        
+        const summaries = [];
+        for (const [agent, result] of Object.entries(globalContext)) {
+            if (result && result.success) {
+                if (result.available !== undefined) {
+                    summaries.push(`${agent}: Checked availability - ${result.available ? 'tables available' : 'no availability'}`);
+                } else if (result.items && result.items.length > 0) {
+                    summaries.push(`${agent}: Found ${result.items.length} menu items`);
+                } else if (result.packages && result.packages.length > 0) {
+                    summaries.push(`${agent}: Found ${result.packages.length} celebration packages`);
+                } else if (result.restaurant) {
+                    summaries.push(`${agent}: Retrieved restaurant information`);
+                } else {
+                    summaries.push(`${agent}: Completed successfully`);
+                }
+            } else {
+                summaries.push(`${agent}: ${result?.error || 'Task failed'}`);
             }
-            
-            // Check if user wants to make a reservation (suggest handoff)
-            if (this.shouldHandoffToReservation(message)) {
+        }
+        
+        return summaries.length > 0 ? summaries.join('\n') : 'No other agents have processed this request yet.';
+    }
+
+    /**
+     * EXECUTE TOOL: Direct tool execution within this agent's domain
+     */
+    async executeTool(toolName, parameters, restaurantId) {
+        try {
+            // Validate parameters
+            const validation = validateToolParameters(toolName, parameters);
+            if (!validation.success) {
+                console.error('❌ Tool parameter validation failed:', validation.errors);
                 return {
-                    ...this.formatResponse(aiResponse),
-                    ...this.suggestHandoff('reservation', message, {
-                        restaurant: menuData.restaurant,
-                        userInterest: 'booking_after_menu'
-                    }, restaurantId)
+                    success: false,
+                    error: `Invalid parameters: ${validation.errors.join(', ')}`
                 };
             }
             
-            return this.formatResponse(aiResponse);
+            console.log(`🔧 Executing tool: ${toolName} with params:`, parameters);
+            
+            switch (toolName) {
+                case 'get_menu_items':
+                    return await this.executeGetMenuItems(parameters, restaurantId);
+                    
+                case 'clarify_and_respond':
+                    return await this.executeClarifyAndRespond(parameters);
+                    
+                default:
+                    console.error('❌ Unknown tool for MenuPricingAgent:', toolName);
+                    return {
+                        success: false,
+                        error: `Unknown tool: ${toolName}`
+                    };
+            }
             
         } catch (error) {
-            console.error(`❌ ${this.name} error:`, error);
-            return this.formatResponse(
-                "I apologize, but I'm having trouble accessing menu information right now. Please try again in a moment.",
-                'message',
-                { error: true }
-            );
+            console.error(`❌ Error executing tool ${toolName}:`, error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     }
 
-    async fetchMenuData(restaurantId) {
+    /**
+     * Execute get_menu_items tool - Core functionality
+     */
+    async executeGetMenuItems(params, restaurantId) {
         try {
-            // Fetch restaurant info
-            const restaurant = await RestaurantService.getRestaurantById(restaurantId);
+            console.log('🍽️ Getting menu items:', params);
             
-            // Fetch menu items
-            const menuItems = await RestaurantService.getMenuItems(restaurantId);
+            // Build filters object
+            const filters = { restaurant_id: restaurantId };
+            if (params.is_gluten_free) filters.is_gluten_free = true;
+            if (params.is_vegan) filters.is_vegan = true;  
+            if (params.is_vegetarian) filters.is_vegetarian = true;
+            if (params.category) filters.category = params.category;
             
-            // Fetch table pricing (relates to dining experience)
-            const tableTypes = await RestaurantService.getTableTypes(restaurantId);
+            // Use RAG service for semantic search
+            const hybridResults = await RAGService.hybridSearch(
+                params.query,
+                'menu_item',
+                filters,
+                10
+            );
             
-            // Organize menu by categories
-            const organizedMenu = this.organizeMenuByCategory(menuItems);
+            // Also get regular menu items as fallback if no hybrid results
+            let menuItems = hybridResults;
+            
+            if (!hybridResults || hybridResults.length === 0) {
+                console.log('🔄 No hybrid results, falling back to regular menu query');
+                const regularMenuItems = await RestaurantService.getMenuItems(restaurantId);
+                
+                // Apply basic filtering to regular results
+                if (regularMenuItems && regularMenuItems.length > 0) {
+                    menuItems = regularMenuItems.filter(item => {
+                        if (params.is_gluten_free && !item.is_gluten_free) return false;
+                        if (params.is_vegan && !item.is_vegan) return false;
+                        if (params.is_vegetarian && !item.is_vegetarian) return false;
+                        if (params.category && item.category !== params.category) return false;
+                        
+                        // Simple text matching for query
+                        const query = params.query.toLowerCase();
+                        const itemText = `${item.name} ${item.description || ''}`.toLowerCase();
+                        return itemText.includes(query);
+                    });
+                }
+            }
             
             return {
-                restaurant,
-                menuItems: menuItems || [],
-                organizedMenu,
-                tableTypes: tableTypes || [],
-                hasMenu: menuItems && menuItems.length > 0
+                success: true,
+                items: menuItems || [],
+                searchQuery: params.query,
+                filtersApplied: filters,
+                foundItems: (menuItems || []).length
             };
             
         } catch (error) {
-            console.error('❌ Error fetching menu data:', error);
-            throw error;
+            console.error('❌ Error getting menu items:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
-    }
-
-    organizeMenuByCategory(menuItems) {
-        if (!menuItems || menuItems.length === 0) return {};
-        
-        const categories = {};
-        
-        menuItems.forEach(item => {
-            const category = item.category || 'Main Dishes';
-            if (!categories[category]) {
-                categories[category] = [];
-            }
-            categories[category].push(item);
-        });
-        
-        return categories;
-    }
-
-    buildSystemPrompt(menuData, context = {}) {
-        const { restaurant, menuItems, hybridResults, hasHybridMatch } = menuData;
-        
-        const vegetarianCount = menuItems?.filter(item => item.is_vegetarian).length || 0;
-        const veganCount = menuItems?.filter(item => item.is_vegan).length || 0;
-        const glutenFreeCount = menuItems?.filter(item => item.is_gluten_free).length || 0;
-        
-        // Group menu items by category
-        const menuByCategory = menuItems?.reduce((acc, item) => {
-            if (!acc[item.category]) acc[item.category] = [];
-            acc[item.category].push(item);
-            return acc;
-        }, {}) || {};
-        
-        // Format menu items by category using **bold** format for frontend parsing
-        const formattedMenu = Object.entries(menuByCategory)
-            .map(([category, items]) => {
-                const categoryItems = items.map(item => 
-                    `**${item.name}**: €${item.price} ${this.formatDietaryInfo(item)}`
-                ).join('\n');
-                return `**${category.toUpperCase()}:**\n${categoryItems}`;
-            }).join('\n\n');
-        
-        return `You are AICHMI, a concise menu assistant for ${restaurant.name}.
-
-${hasHybridMatch ? `**RECOMMENDED DISHES:**
-${hybridResults.slice(0,5).map(item => 
-    `**${item.name}**: €${item.price} ${this.formatDietaryInfo(item)}`
-).join('\n')}
-
-` : ''}**COMPLETE MENU:**
-${formattedMenu}
-
-DIETARY OPTIONS: ${vegetarianCount} vegetarian, ${veganCount} vegan, ${glutenFreeCount} gluten-free
-
-GUIDELINES:
-• Be brief and helpful about menu items
-• Use: 🌱 Vegetarian, 🌿 Vegan, 🌾 Gluten-free  
-• Include prices when mentioning dishes
-• Always show items from the COMPLETE MENU above, never make up items
-• Focus on what the user asked for
-• IMPORTANT: When displaying menu items, use the exact format provided above with **Item Name**: €Price (dietary info)
-• DO NOT add bullet points (*) before menu items - use the ** format only`;
-    }
-
-    formatDietaryInfo(item) {
-        const dietary = [];
-        if (item.is_vegetarian) dietary.push('🌱 Vegetarian');
-        if (item.is_vegan) dietary.push('🌿 Vegan');
-        if (item.is_gluten_free) dietary.push('🌾 Gluten-free');
-        
-        return dietary.length > 0 ? `(${dietary.join(', ')})` : '';
-    }
-
-    buildPrompt(message, conversationHistory, menuData, context = {}) {
-        let prompt = '';
-        
-        if (conversationHistory) {
-            prompt += `Previous conversation:\n${conversationHistory}\n\n`;
-        }
-        
-        prompt += `Current user message: ${message}
-
-Please help the guest with menu information for ${menuData.restaurant.name}. Provide detailed information about dishes, prices, dietary options, and recommendations based on their interests or dietary needs.`;
-
-        return prompt;
-    }
-
-    shouldHandoffToReservation(message) {
-        const reservationKeywords = [
-            'book', 'reserve', 'table', 'reservation', 'sounds good',
-            'I want to', 'let\'s book', 'make a reservation', 'availability'
-        ];
-        
-        const msg = message.toLowerCase();
-        return reservationKeywords.some(keyword => msg.includes(keyword));
-    }
-
-    shouldDelegateToReservation(message) {
-        const reservationKeywords = [
-            'book', 'reserve', 'table', 'reservation', 'available', 'date', 'time',
-            'party', 'people', 'guests', 'confirm', 'booking', 'friday', 'quiet', 'romantic'
-        ];
-        
-        const msg = message.toLowerCase();
-        return reservationKeywords.some(keyword => msg.includes(keyword));
-    }
-
-    extractDietaryFilters(message) {
-        const msg = message.toLowerCase();
-        const filters = {};
-        
-        // Check for dietary restrictions
-        if (msg.includes('gluten') || msg.includes('celiac') || msg.includes('gluten-free')) {
-            filters.is_gluten_free = true;
-        }
-        
-        if (msg.includes('vegetarian') || msg.includes('veggie')) {
-            filters.is_vegetarian = true;
-        }
-        
-        if (msg.includes('vegan') || msg.includes('plant-based')) {
-            filters.is_vegan = true;
-        }
-        
-        // Check for category filters
-        if (msg.includes('main') || msg.includes('entree') || msg.includes('main course')) {
-            filters.category = 'Main';
-        } else if (msg.includes('appetizer') || msg.includes('starter')) {
-            filters.category = 'Appetizer';
-        } else if (msg.includes('dessert')) {
-            filters.category = 'Dessert';
-        } else if (msg.includes('drink') || msg.includes('beverage')) {
-            filters.category = 'Drink';
-        }
-        
-        return filters;
-    }
-
-    hasSpecificMenuQuery(message) {
-        const specificQueries = [
-            'best', 'recommend', 'popular', 'signature', 'special', 'favorite',
-            'main course', 'dish', 'food', 'cuisine', 'what do you serve'
-        ];
-        
-        const msg = message.toLowerCase();
-        return specificQueries.some(query => msg.includes(query));
     }
 
     /**
-     * Check if there's an ongoing reservation in progress that was interrupted
+     * Execute clarify_and_respond tool
      */
-    hasOngoingReservation(context, history = []) {
-        // Check if we're in multi-agent mode and have orchestrator context
-        if (context?.orchestrator?.conversationState) {
-            const state = context.orchestrator.conversationState;
-            if (state.context?.bookingInProgress || state.interruptedContext?.bookingData?.bookingInProgress) {
-                return true;
+    async executeClarifyAndRespond(params) {
+        try {
+            console.log('❓ Clarifying and responding:', params);
+            
+            return {
+                success: true,
+                message: params.message,
+                responseType: params.response_type || 'clarification'
+            };
+            
+        } catch (error) {
+            console.error('❌ Error in clarify and respond:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * ANALYZE QUERY SCOPE: Detect menu vs non-menu queries
+     */
+    analyzeQueryScope(message) {
+        const lowerMessage = message.toLowerCase();
+        
+        // Keywords that indicate non-menu queries
+        const availabilityKeywords = ['table', 'book', 'reserve', 'available', 'date', 'time', 'tonight', 'tomorrow'];
+        const celebrationKeywords = ['birthday', 'anniversary', 'celebration', 'special occasion', 'romantic'];
+        const infoKeywords = ['hours', 'address', 'location', 'contact', 'phone', 'email'];
+        
+        // Detect non-menu queries
+        const hasAvailabilityQuery = availabilityKeywords.some(keyword => lowerMessage.includes(keyword));
+        const hasCelebrationQuery = celebrationKeywords.some(keyword => lowerMessage.includes(keyword));
+        const hasInfoQuery = infoKeywords.some(keyword => lowerMessage.includes(keyword));
+        
+        // Extract the menu-focused part of the query
+        let menuQuery = message;
+        let nonMenuParts = [];
+        
+        if (hasAvailabilityQuery) {
+            // Find availability-related sentences
+            const sentences = message.split(/[.!?]+/);
+            const availabilitySentences = sentences.filter(s => 
+                availabilityKeywords.some(keyword => s.toLowerCase().includes(keyword))
+            );
+            const menuSentences = sentences.filter(s => 
+                !availabilityKeywords.some(keyword => s.toLowerCase().includes(keyword))
+            );
+            
+            if (availabilitySentences.length > 0) {
+                nonMenuParts.push({
+                    type: 'availability',
+                    query: availabilitySentences.join('. ').trim(),
+                    suggestedAgent: 'TableAvailabilityAgent'
+                });
+            }
+            
+            if (menuSentences.length > 0) {
+                menuQuery = menuSentences.join('. ').trim();
             }
         }
         
-        // Check direct context
-        if (context?.bookingInProgress) {
-            return true;
+        if (hasCelebrationQuery) {
+            const sentences = message.split(/[.!?]+/);
+            const celebrationSentences = sentences.filter(s => 
+                celebrationKeywords.some(keyword => s.toLowerCase().includes(keyword))
+            );
+            
+            if (celebrationSentences.length > 0) {
+                nonMenuParts.push({
+                    type: 'celebration',
+                    query: celebrationSentences.join('. ').trim(),
+                    suggestedAgent: 'CelebrationAgent'
+                });
+            }
         }
         
-        // Fallback: Check conversation history to detect ongoing reservation
-        // Look for recent AI messages asking for reservation details
-        const recentAIMessages = history.slice(-5).filter(msg => msg.sender === 'ai');
-        const reservationKeywords = [
-            'name, phone number, and email',
-            'contact information',
-            'name and phone',
-            'Which type of table would you prefer',
-            'available for July',
-            'checking for availability'
-        ];
+        if (hasInfoQuery) {
+            const sentences = message.split(/[.!?]+/);
+            const infoSentences = sentences.filter(s => 
+                infoKeywords.some(keyword => s.toLowerCase().includes(keyword))
+            );
+            
+            if (infoSentences.length > 0) {
+                nonMenuParts.push({
+                    type: 'info',
+                    query: infoSentences.join('. ').trim(),
+                    suggestedAgent: 'RestaurantInfoAgent'
+                });
+            }
+        }
         
-        return recentAIMessages.some(msg => 
-            reservationKeywords.some(keyword => 
-                msg.text?.includes(keyword)
-            )
+        return {
+            hasMultipleParts: nonMenuParts.length > 0,
+            menuQuery: menuQuery || message,
+            nonMenuParts,
+            originalMessage: message
+        };
+    }
+
+    /**
+     * ANALYZE TASK COMPLETION: Determine if handoff is needed
+     */
+    analyzeTaskCompletion(originalMessage, queryAnalysis, toolResult) {
+        // If we successfully handled menu query and there are non-menu parts, hand off availability part only
+        if (queryAnalysis.hasMultipleParts && queryAnalysis.nonMenuParts.length > 0 && 
+            toolResult && toolResult.success && this.hasCompletedMenuWork(toolResult)) {
+            
+            const availabilityPart = queryAnalysis.nonMenuParts.find(part => part.type === 'availability');
+            if (availabilityPart) {
+                return {
+                    isComplete: false,
+                    suggestedAgent: 'TableAvailabilityAgent',
+                    remainingQuery: this.extractAvailabilityQuery(originalMessage) // Extract just the availability part
+                };
+            }
+        }
+        
+        // If menu search failed or needs more information, task might be incomplete
+        if (toolResult && !toolResult.success) {
+            return {
+                isComplete: true, // Let this agent handle the error
+                suggestedAgent: null,
+                remainingQuery: null
+            };
+        }
+        
+        // If we successfully found menu items, task is complete
+        if (toolResult && toolResult.success) {
+            return {
+                isComplete: true,
+                suggestedAgent: null,
+                remainingQuery: null
+            };
+        }
+        
+        // Default: task is complete
+        return {
+            isComplete: true,
+            suggestedAgent: null,
+            remainingQuery: null
+        };
+    }
+
+    /**
+     * Check if we've completed menu-related work
+     */
+    hasCompletedMenuWork(toolResult) {
+        return toolResult.success && toolResult.items && toolResult.foundItems >= 0;
+    }
+
+    /**
+     * Extract only the availability-related part of the query
+     */
+    extractAvailabilityQuery(message) {
+        const availabilityKeywords = ['table', 'book', 'reserve', 'available', 'date', 'time', 'tonight', 'tomorrow'];
+        const lowerMessage = message.toLowerCase();
+        
+        // Look for availability-related phrases
+        if (lowerMessage.includes('check availability') || lowerMessage.includes('available')) {
+            // Extract the specific availability request
+            const match = message.match(/(check availability|available).+?(\d+\s*people).+?(tomorrow|tonight|\d{4}-\d{2}-\d{2}).+?(\d{1,2}:\d{2}|\d{1,2}\s*pm|\d{1,2}\s*am)/i);
+            if (match) {
+                return match[0];
+            }
+        }
+        
+        // Extract availability-related sentences
+        const sentences = message.split(/[.!?]+/);
+        const availabilitySentences = sentences.filter(s => 
+            availabilityKeywords.some(keyword => s.toLowerCase().includes(keyword))
         );
+        
+        if (availabilitySentences.length > 0) {
+            return availabilitySentences.join('. ').trim();
+        }
+        
+        // Fallback: generic availability query
+        return "do you have tables available?";
     }
 
     /**
-     * Enhance menu response with a prompt to continue reservation if there's one in progress
+     * Generate fallback response when AI fails
      */
-    enhanceResponseWithReservationPrompt(aiResponse) {
-        return `${aiResponse}\n\nWould you like to continue with your reservation?`;
+    generateFallbackResponse(toolResult, toolName) {
+        if (toolName === 'get_menu_items' && toolResult.success && toolResult.items && toolResult.items.length > 0) {
+            // Find the most expensive item
+            const sortedItems = toolResult.items.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+            const mostExpensive = sortedItems[0];
+            
+            return {
+                type: 'message',
+                response: `Great! I found our most expensive dish: **${mostExpensive.name}** at €${mostExpensive.price}. ${mostExpensive.description || 'It\'s one of our premium selections!'}`
+            };
+        }
+        
+        if (toolName === 'get_menu_items' && toolResult.success && toolResult.items && toolResult.items.length === 0) {
+            return {
+                type: 'message',
+                response: "I searched our menu but couldn't find items matching your specific request. Would you like me to show you our full menu instead?"
+            };
+        }
+        
+        // Default fallback
+        return {
+            type: 'message',
+            response: "I can help you with menu information! What would you like to know about our dishes?"
+        };
     }
-
 }
 
 export default MenuPricingAgent;
