@@ -1,0 +1,86 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  AZURE_WEBAPP_NAME: 'aichmi-app'
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: |
+          aichmi_frontend/package-lock.json
+          aichmi_backend/package-lock.json
+    
+    - name: 📦 Install frontend dependencies
+      run: |
+        cd aichmi_frontend
+        npm ci
+        
+    - name: 🔨 Build frontend
+      run: |
+        cd aichmi_frontend
+        npm run build
+        
+    - name: 📦 Install backend dependencies
+      run: |
+        cd aichmi_backend
+        npm ci --only=production
+        
+    - name: 📋 Copy frontend build to backend
+      run: |
+        cp -r aichmi_frontend/dist/* aichmi_backend/public/
+        
+    - name: 🏗️ Create deployment package
+      run: |
+        cd aichmi_backend
+        zip -r ../deployment-package.zip . -x "node_modules/.cache/*" "*.log" ".env*"
+        
+    - name: 🚀 Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: deployment-package.zip
+        
+    - name: 🔧 Configure App Settings
+      uses: azure/CLI@v1
+      with:
+        azcliversion: 2.30.0
+        inlineScript: |
+          az webapp config appsettings set \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --settings \
+              NODE_ENV=production \
+              PORT=8080 \
+              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              GOOGLE_MAPS_API_KEY="${{ secrets.GOOGLE_MAPS_API_KEY }}" \
+              STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
+              STRIPE_SECRET_KEY="${{ secrets.STRIPE_SECRET_KEY }}" \
+              GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              BASIC_AUTH_USERNAME="${{ secrets.BASIC_AUTH_USERNAME }}" \
+              BASIC_AUTH_PASSWORD="${{ secrets.BASIC_AUTH_PASSWORD }}"
+              
+    - name: ✅ Deployment complete
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "🌐 App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"

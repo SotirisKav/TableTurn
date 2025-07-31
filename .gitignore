@@ -11,3 +11,5 @@ dist/
 
 .env
 .serena
+CLAUDE.md
+.env.azure
