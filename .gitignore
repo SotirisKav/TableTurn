@@ -14,3 +14,4 @@ dist/
 CLAUDE.md
 .env.azure
 *.zip
+/aichmi_backend/public
