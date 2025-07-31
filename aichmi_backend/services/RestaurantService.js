@@ -81,10 +81,27 @@ class RestaurantService {
                 ORDER BY r.name;
             `;
             
+            console.log('RestaurantService: Executing getAllRestaurants query...');
             const result = await db.query(query);
-            return result;
+            
+            // Enhanced debugging for production environment
+            console.log('RestaurantService: Query result type:', typeof result);
+            console.log('RestaurantService: Query result isArray:', Array.isArray(result));
+            console.log('RestaurantService: Query result keys:', result ? Object.keys(result) : 'null/undefined');
+            
+            // Normalize the result to always return an array
+            // Handle both direct array responses and result object responses
+            const restaurants = Array.isArray(result) ? result : (result.rows || []);
+            
+            console.log('RestaurantService: Normalized restaurants count:', restaurants.length);
+            return restaurants;
         } catch (error) {
-            console.error('Error fetching restaurants:', error);
+            console.error('RestaurantService: Error fetching restaurants:', error);
+            console.error('RestaurantService: Error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
             throw error;
         }
     }

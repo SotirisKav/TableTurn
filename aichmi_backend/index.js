@@ -76,11 +76,37 @@ app.get('/api/health', (req, res) => {
 app.get('/api/restaurants', async (req, res) => {
   try {
     console.log('Fetching restaurants...');
-    const restaurants = await RestaurantService.getAllRestaurants();
-    console.log('Restaurants fetched:', restaurants.length);
+    const restaurantsData = await RestaurantService.getAllRestaurants();
+    
+    // Enhanced debugging for production environment
+    console.log('Raw restaurantsData type:', typeof restaurantsData);
+    console.log('Raw restaurantsData isArray:', Array.isArray(restaurantsData));
+    console.log('Raw restaurantsData keys:', restaurantsData ? Object.keys(restaurantsData) : 'null/undefined');
+    console.log('Raw restaurantsData sample:', JSON.stringify(restaurantsData).substring(0, 200));
+
+    // --- START OF CRITICAL FIX ---
+
+    // 1. Normalize the data: Check if the returned data is an object that contains a 'rows' property.
+    // This handles the case where the pg library returns a full result object in production.
+    const restaurants = Array.isArray(restaurantsData) ? restaurantsData : (restaurantsData.rows || []);
+
+    // 2. Add a final safety check: Ensure we are always sending an array to the frontend.
+    // If, for any reason, 'restaurants' is still not an array, send an empty array to prevent a frontend crash.
+    if (!Array.isArray(restaurants)) {
+        console.error("CRITICAL ERROR: The data returned from getAllRestaurants could not be resolved to an array. Data received:", restaurantsData);
+        return res.json([]); // Gracefully send an empty array
+    }
+
+    // --- END OF CRITICAL FIX ---
+
+    console.log('Normalized restaurants array length:', restaurants.length);
+    console.log('First restaurant sample:', restaurants[0] ? JSON.stringify(restaurants[0]) : 'No restaurants found');
     res.json(restaurants);
   } catch (error) {
-    console.error('Error fetching restaurants:', error);
+    console.error('Error fetching restaurants - Full error object:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       error: 'Failed to fetch restaurants',
       details: error.message 
