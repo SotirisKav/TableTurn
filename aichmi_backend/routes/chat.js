@@ -12,7 +12,7 @@ router.post('/', async (req, res) => {
     console.log('=== MULTI-AGENT CHAT ROUTE CALLED ===');
     console.log('Request body:', req.body);
     
-    const { message, history = [], restaurantId = null, useMultiAgent = true } = req.body;
+    const { message, history = [], restaurantId = null, useMultiAgent = true, sessionId = null } = req.body;
     
     // Use default restaurant ID (1 for Lofaki Taverna) if none provided
     const effectiveRestaurantId = restaurantId || 1;
@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
       console.log('🎭 Using Multi-Agent System');
       console.log('Processing with orchestrator:', { message, historyLength: history.length, restaurantId: effectiveRestaurantId });
       
-      result = await orchestrator.processMessage(message, history, effectiveRestaurantId);
+      result = await orchestrator.processMessage(message, history, effectiveRestaurantId, sessionId);
       
       console.log('=== MULTI-AGENT RESPONSE READY ===');
       console.log('Active agent:', result.orchestrator?.agent);
