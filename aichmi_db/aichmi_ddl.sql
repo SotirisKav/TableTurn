@@ -370,3 +370,101 @@ CREATE TRIGGER trg_assign_available_table
     FOR EACH ROW
     WHEN (NEW.table_id IS NULL)
     EXECUTE FUNCTION assign_available_table();
+
+
+-- === DASHBOARD FUNCTIONS ===
+
+-- Function to clean up expired reservations
+CREATE OR REPLACE FUNCTION public.cleanup_expired_reservations()
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    gap_hours INT;
+    cutoff_time TIMESTAMP;
+    expired_table RECORD;
+BEGIN
+    -- Process each restaurant separately due to different gap hours
+    FOR gap_hours IN 
+        SELECT DISTINCT min_reservation_gap_hours FROM restaurant 
+        WHERE min_reservation_gap_hours IS NOT NULL
+    LOOP
+        -- Calculate cutoff time (current time minus gap hours)
+        cutoff_time := NOW() - (COALESCE(gap_hours, 2) || ' hours')::INTERVAL;
+        
+        -- Find tables that should be unreserved
+        FOR expired_table IN
+            SELECT DISTINCT t.table_id, t.restaurant_id, r.min_reservation_gap_hours
+            FROM tables t
+            JOIN restaurant r ON t.restaurant_id = r.restaurant_id
+            LEFT JOIN reservation res ON t.table_id = res.table_id
+            WHERE t.status = 'reserved'
+              AND r.min_reservation_gap_hours = gap_hours
+              AND (
+                  res.table_id IS NULL 
+                  OR (res.reservation_date + res.reservation_time + (COALESCE(r.min_reservation_gap_hours, 2) || ' hours')::INTERVAL) < NOW()
+              )
+        LOOP
+            -- Reset table status to available
+            UPDATE tables
+            SET status = 'available'
+            WHERE table_id = expired_table.table_id 
+              AND restaurant_id = expired_table.restaurant_id;
+              
+            RAISE NOTICE 'Table % (restaurant %) status reset to available', 
+                expired_table.table_id, expired_table.restaurant_id;
+        END LOOP;
+    END LOOP;
+END;
+$function$;
+
+-- Function to get current table status
+CREATE OR REPLACE FUNCTION public.get_current_table_status(p_table_id integer, p_restaurant_id integer)
+ RETURNS character varying
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    gap_hours INT;
+    current_stored_status VARCHAR(20);
+    active_reservation_count INT;
+    curr_time TIMESTAMP;
+BEGIN
+    -- Get current time
+    curr_time := NOW();
+    
+    -- Get the restaurant's gap hours
+    SELECT min_reservation_gap_hours
+    INTO gap_hours
+    FROM restaurant
+    WHERE restaurant_id = p_restaurant_id;
+    
+    -- Default gap to 2 hours if not set
+    gap_hours := COALESCE(gap_hours, 2);
+    
+    -- Check for active reservations within the gap window around NOW()
+    SELECT COUNT(*)
+    INTO active_reservation_count
+    FROM reservation
+    WHERE table_id = p_table_id
+      AND restaurant_id = p_restaurant_id
+      AND (reservation_date + reservation_time - (gap_hours || ' hours')::INTERVAL) <= curr_time
+      AND (reservation_date + reservation_time + (gap_hours || ' hours')::INTERVAL) >= curr_time;
+    
+    -- Get current stored status (for manually set occupied status)
+    SELECT status INTO current_stored_status
+    FROM tables
+    WHERE table_id = p_table_id AND restaurant_id = p_restaurant_id;
+    
+    -- Priority logic:
+    -- 1. If there are active reservations within gap window -> 'reserved'
+    -- 2. If manually set to 'occupied' and no conflicting reservations -> 'occupied'  
+    -- 3. Otherwise -> 'available'
+    IF active_reservation_count > 0 THEN
+        RETURN 'reserved';
+    ELSIF current_stored_status = 'occupied' THEN
+        RETURN 'occupied';
+    ELSE
+        RETURN 'available';
+    END IF;
+END;
+$function$;
