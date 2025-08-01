@@ -9,7 +9,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🗄️  AICHMI Database Setup Script${NC}"
+echo -e "${GREEN}🗄️  TableTurn Database Setup Script${NC}"
 echo "=================================="
 
 # Get current directory
@@ -17,9 +17,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Configuration
-POSTGRES_SERVER="psql-aichmi.postgres.database.azure.com"
-POSTGRES_ADMIN="aichmi_admin"
-DATABASE_NAME="aichmi"
+POSTGRES_SERVER="psql-tableturn.postgres.database.azure.com"
+POSTGRES_ADMIN="tableturn_admin"
+DATABASE_NAME="tableturn"
 
 # Check if psql is installed
 if ! command -v psql &> /dev/null; then
@@ -57,8 +57,8 @@ psql "$CONNECTION_STRING" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 # Run DDL script
 echo -e "${BLUE}🏗️  Creating database schema...${NC}"
-if [ -f "$PROJECT_ROOT/aichmi_db/aichmi_ddl.sql" ]; then
-    psql "$CONNECTION_STRING" -f "$PROJECT_ROOT/aichmi_db/aichmi_ddl.sql"
+if [ -f "$PROJECT_ROOT/database/tableturn_ddl.sql" ]; then
+    psql "$CONNECTION_STRING" -f "$PROJECT_ROOT/database/tableturn_ddl.sql"
     echo -e "${GREEN}✅ Schema created successfully!${NC}"
 else
     echo -e "${YELLOW}⚠️  DDL file not found. Skipping schema creation.${NC}"
@@ -66,8 +66,8 @@ fi
 
 # Run sample data script
 echo -e "${BLUE}📊 Loading sample data...${NC}"
-if [ -f "$PROJECT_ROOT/aichmi_db/sample_data.sql" ]; then
-    psql "$CONNECTION_STRING" -f "$PROJECT_ROOT/aichmi_db/sample_data.sql"
+if [ -f "$PROJECT_ROOT/database/sample_data.sql" ]; then
+    psql "$CONNECTION_STRING" -f "$PROJECT_ROOT/database/sample_data.sql"
     echo -e "${GREEN}✅ Sample data loaded successfully!${NC}"
 else
     echo -e "${YELLOW}⚠️  Sample data file not found. Skipping data load.${NC}"

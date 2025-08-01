@@ -9,7 +9,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🚀 AICHMI Local Deployment Script${NC}"
+echo -e "${GREEN}🚀 TableTurn Local Deployment Script${NC}"
 echo "================================="
 
 # Get current directory
@@ -17,8 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Configuration
-APP_NAME="aichmi-app"
-RESOURCE_GROUP="rg-aichmi-prod"
+APP_NAME="tableturn-app"
+RESOURCE_GROUP="rg-tableturn-prod"
 
 # Check if Azure CLI is installed and logged in
 if ! command -v az &> /dev/null; then
@@ -33,16 +33,16 @@ fi
 
 # Build frontend
 echo -e "${BLUE}🔨 Building frontend...${NC}"
-cd "$PROJECT_ROOT/aichmi_frontend"
+cd "$PROJECT_ROOT/frontend"
 npm ci
 npm run build
 
 # Copy frontend build to backend public directory
 echo -e "${BLUE}📋 Copying frontend to backend...${NC}"
-cd "$PROJECT_ROOT/aichmi_backend"
+cd "$PROJECT_ROOT/backend"
 rm -rf public/*
 mkdir -p public
-cp -r ../aichmi_frontend/dist/* public/
+cp -r ../frontend/dist/* public/
 
 # Install backend dependencies
 echo -e "${BLUE}📦 Installing backend dependencies...${NC}"
@@ -51,7 +51,7 @@ npm ci --only=production
 # Create deployment package
 echo -e "${BLUE}📦 Creating deployment package...${NC}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-ZIP_NAME="aichmi-deploy-${TIMESTAMP}.zip"
+ZIP_NAME="tableturn-deploy-${TIMESTAMP}.zip"
 
 zip -r "$ZIP_NAME" . \
     -x "node_modules/.cache/*" \

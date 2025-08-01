@@ -1,0 +1,38 @@
+/* Greek-inspired minimalist design for TableTurn */
+:root {
+  --aegean-blue: #1e3a8a;
+  --deep-blue: #1e40af;
+  --soft-blue: #e0f2fe;
+  --white: #ffffff;
+  --cream: #fefefe;
+  --text-dark: #1f2937;
+  --text-gray: #6b7280;
+  --shadow: rgba(30, 58, 138, 0.1);
+  --transition: all 0.3s ease;
+  
+  /* Modern design system */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-accent: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-hero: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --card-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+  --hover-shadow: 0 15px 35px rgba(31, 38, 135, 0.2);
+  --border-radius: 16px;
+  --border-radius-large: 24px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.6;
+  color: var(--text-dark);
+  background: var(--white);
+  width: 100%;
+  overflow-x: hidden;
+}

@@ -9,7 +9,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}⚙️  AICHMI Parameters Update Script${NC}"
+echo -e "${GREEN}⚙️  TableTurn Parameters Update Script${NC}"
 echo "==================================="
 
 # Get current directory

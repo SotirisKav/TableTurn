@@ -8,7 +8,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🚀 AICHMI Azure Deployment Script${NC}"
+echo -e "${GREEN}🚀 TableTurn Azure Deployment Script${NC}"
 echo "=================================="
 
 # Check if Azure CLI is installed
@@ -28,9 +28,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Parameters
-RESOURCE_GROUP_NAME="rg-aichmi-prod"
+RESOURCE_GROUP_NAME="rg-tableturn-prod"
 LOCATION="francecentral"
-DEPLOYMENT_NAME="aichmi-deployment-$(date +%Y%m%d-%H%M%S)"
+DEPLOYMENT_NAME="tableturn-deployment-$(date +%Y%m%d-%H%M%S)"
 
 # Get user's public IP
 echo -e "${YELLOW}🔍 Getting your public IP address...${NC}"
@@ -97,17 +97,17 @@ APP_NAME=$(az deployment group show \
 
 # Build and deploy application
 echo -e "${YELLOW}🔨 Building frontend...${NC}"
-cd "$PROJECT_ROOT/aichmi_frontend"
+cd "$PROJECT_ROOT/frontend"
 npm ci
 npm run build
 
 echo -e "${YELLOW}📤 Deploying application...${NC}"
-cd "$PROJECT_ROOT/aichmi_backend"
+cd "$PROJECT_ROOT/backend"
 
 # Create deployment package
-zip -r ../aichmi-deploy.zip . -x "node_modules/*" ".env*"
-cd "$PROJECT_ROOT/aichmi_frontend/dist"
-zip -r ../../aichmi-deploy.zip .
+zip -r ../tableturn-deploy.zip . -x "node_modules/*" ".env*"
+cd "$PROJECT_ROOT/frontend/dist"
+zip -r ../../tableturn-deploy.zip .
 
 cd "$PROJECT_ROOT"
 
@@ -115,7 +115,7 @@ cd "$PROJECT_ROOT"
 az webapp deployment source config-zip \
     --resource-group "$RESOURCE_GROUP_NAME" \
     --name "$APP_NAME" \
-    --src aichmi-deploy.zip
+    --src tableturn-deploy.zip
 
 echo -e "${GREEN}✅ Deployment completed successfully!${NC}"
 echo ""
@@ -130,7 +130,7 @@ echo "1. Set up your environment variables in the App Service"
 echo "2. Initialize the database schema"
 echo "3. Configure your domain and SSL certificate (optional)"
 echo ""
-echo -e "${GREEN}🎉 Your AICHMI application is now deployed!${NC}"
+echo -e "${GREEN}🎉 Your TableTurn application is now deployed!${NC}"
 
 # Cleanup
-rm -f aichmi-deploy.zip
+rm -f tableturn-deploy.zip

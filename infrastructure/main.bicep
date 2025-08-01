@@ -2,16 +2,16 @@
 param location string = resourceGroup().location
 
 @description('The name of the App Service app')
-param appName string = 'aichmi-app'
+param appName string = 'tableturn-app'
 
 @description('The name of the App Service plan')
-param appServicePlanName string = 'asp-aichmi'
+param appServicePlanName string = 'asp-tableturn'
 
 @description('The name of the PostgreSQL server')
-param postgresServerName string = 'psql-aichmi'
+param postgresServerName string = 'psql-tableturn'
 
 @description('The administrator username for PostgreSQL')
-param postgresAdminLogin string = 'aichmi_admin'
+param postgresAdminLogin string = 'tableturn_admin'
 
 @description('The administrator password for PostgreSQL')
 @secure()
@@ -64,7 +64,7 @@ resource appService 'Microsoft.Web/sites@2023-01-01' = {
         {
           // Your application uses a single DATABASE_URL, as shown in deploy.yml and setup-database.sh.
           name: 'DATABASE_URL'
-          value: 'postgresql://${postgresAdminLogin}:${postgresAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/aichmi?sslmode=require'
+          value: 'postgresql://${postgresAdminLogin}:${postgresAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/tableturn?sslmode=require'
         }
         // NOTE: Other secrets (GEMINI_API_KEY, JWT_SECRET, etc.) are set securely via the GitHub Actions workflow.
         // This is the correct pattern and prevents secrets from being stored in the infrastructure code.
@@ -120,7 +120,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-03-01-pr
 // PostgreSQL Database
 resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-03-01-preview' = {
   parent: postgresServer
-  name: 'aichmi'
+  name: 'tableturn'
   properties: {
     charset: 'utf8'
     collation: 'en_US.utf8'

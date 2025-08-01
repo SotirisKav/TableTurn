@@ -3,16 +3,16 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "appName": {
-      "value": "aichmi-app"
+      "value": "tableturn-app"
     },
     "appServicePlanName": {
-      "value": "asp-aichmi"
+      "value": "asp-tableturn"
     },
     "postgresServerName": {
-      "value": "psql-aichmi"
+      "value": "psql-tableturn"
     },
     "postgresAdminLogin": {
-      "value": "aichmi_admin"
+      "value": "tableturn_admin"
     },
     "postgresAdminPassword": {
       "value": "REPLACE_WITH_SECURE_PASSWORD"
