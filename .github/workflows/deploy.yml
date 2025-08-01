@@ -1,86 +1,133 @@
-name: Deploy to Azure
+# .github/workflows/deploy.yml
 
+name: AICHMI CI/CD Pipeline for Azure
+
+# -----------------------------------------------------------------------------
+#  TRIGGERS: When does this pipeline run?
+# -----------------------------------------------------------------------------
 on:
+  # 1. Run on every push to the 'main' branch (for automatic deployment)
   push:
-    branches: [ main ]
+    branches:
+      - main
+
+  # 2. Run on every pull request targeting the 'main' branch (for testing before merge)
+  pull_request:
+    branches:
+      - main
+
+  # 3. Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-env:
-  NODE_VERSION: '18'
-  AZURE_WEBAPP_NAME: 'aichmi-app'
-  AZURE_WEBAPP_PACKAGE_PATH: '.'
-
+# -----------------------------------------------------------------------------
+#  JOBS: What tasks does this pipeline perform?
+# -----------------------------------------------------------------------------
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    
+  # ===========================================================================
+  #  CI JOB: Build & Test
+  #  This job runs on EVERY push and pull request to ensure code quality.
+  # ===========================================================================
+  build-and-test:
+    runs-on: ubuntu-latest # Use a standard Linux environment
+
+    strategy:
+      matrix:
+        node-version: [18.x] # Specify the Node.js version to use
+
     steps:
-    - name: 🔄 Checkout code
-      uses: actions/checkout@v4
-      
-    - name: 🟢 Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: |
-          aichmi_frontend/package-lock.json
-          aichmi_backend/package-lock.json
-    
-    - name: 📦 Install frontend dependencies
-      run: |
-        cd aichmi_frontend
-        npm ci
-        
-    - name: 🔨 Build frontend
-      run: |
-        cd aichmi_frontend
-        npm run build
-        
-    - name: 📦 Install backend dependencies
-      run: |
-        cd aichmi_backend
-        npm ci --only=production
-        
-    - name: 📋 Copy frontend build to backend
-      run: |
-        cp -r aichmi_frontend/dist/* aichmi_backend/public/
-        
-    - name: 🏗️ Create deployment package
-      run: |
-        cd aichmi_backend
-        zip -r ../deployment-package.zip . -x "node_modules/.cache/*" "*.log" ".env*"
-        
-    - name: 🚀 Deploy to Azure Web App
-      uses: azure/webapps-deploy@v2
-      with:
-        app-name: ${{ env.AZURE_WEBAPP_NAME }}
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: deployment-package.zip
-        
-    - name: 🔧 Configure App Settings
-      uses: azure/CLI@v1
-      with:
-        azcliversion: 2.30.0
-        inlineScript: |
-          az webapp config appsettings set \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --settings \
-              NODE_ENV=production \
-              PORT=8080 \
-              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
-              JWT_SECRET="${{ secrets.JWT_SECRET }}" \
-              GOOGLE_MAPS_API_KEY="${{ secrets.GOOGLE_MAPS_API_KEY }}" \
-              STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}" \
-              STRIPE_SECRET_KEY="${{ secrets.STRIPE_SECRET_KEY }}" \
-              GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
-              GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-              BASIC_AUTH_USERNAME="${{ secrets.BASIC_AUTH_USERNAME }}" \
-              BASIC_AUTH_PASSWORD="${{ secrets.BASIC_AUTH_PASSWORD }}"
-              
-    - name: ✅ Deployment complete
-      run: |
-        echo "🎉 Deployment completed successfully!"
-        echo "🌐 App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+      # Step 1: Check out the repository code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Setup Node.js environment
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm' # Cache npm packages for faster builds
+          cache-dependency-path: |
+            aichmi_frontend/package-lock.json
+            aichmi_backend/package-lock.json
+
+      # Step 3: Install Frontend Dependencies
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./aichmi_frontend
+
+      # Step 4: Install Backend Dependencies (including devDependencies for testing)
+      - name: Install Backend Dependencies
+        run: npm install
+        working-directory: ./aichmi_backend
+
+      # Step 5: Run Linter (Optional but recommended)
+      # - name: Run Linter
+      #   run: npm run lint
+      #   working-directory: ./aichmi_backend # Or wherever your lint script is
+
+      # Step 6: Run Automated Tests (Crucial for CI)
+      # - name: Run Tests
+      #   run: npm test
+      #   working-directory: ./aichmi_backend
+
+      # Step 7: Build the Frontend
+      - name: Build Frontend
+        run: npm run build
+        working-directory: ./aichmi_frontend
+
+  # ===========================================================================
+  #  CD JOB: Deploy to Azure
+  #  This job ONLY runs when code is pushed or merged to the 'main' branch.
+  # ===========================================================================
+  deploy:
+    # This job depends on the 'build-and-test' job finishing successfully
+    needs: build-and-test
+
+    # This condition ensures it ONLY runs on the 'main' branch
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    runs-on: ubuntu-latest
+    environment:
+      name: 'Production' # Optional: for GitHub environments
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    steps:
+      # Step 1: Check out the repository code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Setup Node.js environment
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+          cache: 'npm'
+          cache-dependency-path: |
+            aichmi_frontend/package-lock.json
+            aichmi_backend/package-lock.json
+
+      # Step 3: Build the Frontend
+      - name: Install and Build Frontend
+        run: |
+          npm install
+          npm run build
+        working-directory: ./aichmi_frontend
+
+      # Step 4: Prepare the Backend for Deployment
+      - name: Prepare Backend
+        run: |
+          # Create the public directory to hold the frontend build
+          mkdir -p public
+          # Copy the built frontend into the backend's public folder
+          cp -r ../aichmi_frontend/dist/* ./public/
+          # Install ONLY production dependencies for the backend
+          npm install --only=production
+        working-directory: ./aichmi_backend
+
+      # Step 5: Deploy to Azure App Service
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'aichmi-app' # The name of your Azure App Service
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./aichmi_backend # Deploy the entire backend folder
