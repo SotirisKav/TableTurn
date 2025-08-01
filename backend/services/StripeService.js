@@ -1,11 +1,22 @@
 import Stripe from 'stripe';
 import db from '../config/database.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+let stripe;
+
+// Initialize Stripe lazily to ensure environment variables are loaded
+function getStripe() {
+    if (!stripe) {
+        if (!process.env.STRIPE_SECRET_KEY) {
+            throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
+        }
+        stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    }
+    return stripe;
+}
 
 class StripeService {
     async createCustomer(email, name) {
-        return await stripe.customers.create({
+        return await getStripe().customers.create({
             email,
             name,
             metadata: {
@@ -15,7 +26,7 @@ class StripeService {
     }
 
     async createSubscription(customerId, priceId) {
-        return await stripe.subscriptions.create({
+        return await getStripe().subscriptions.create({
             customer: customerId,
             items: [{ price: priceId }],
             payment_behavior: 'default_incomplete',
@@ -36,7 +47,7 @@ class StripeService {
 
     async handleWebhook(signature, payload) {
         try {
-            const event = stripe.webhooks.constructEvent(
+            const event = getStripe().webhooks.constructEvent(
                 payload,
                 signature,
                 process.env.STRIPE_WEBHOOK_SECRET
@@ -74,7 +85,7 @@ class StripeService {
 
     async getSubscription(subscriptionId) {
         try {
-            return await stripe.subscriptions.retrieve(subscriptionId);
+            return await getStripe().subscriptions.retrieve(subscriptionId);
         } catch (error) {
             throw new Error(`Failed to retrieve subscription: ${error.message}`);
         }
@@ -82,7 +93,7 @@ class StripeService {
 
     async createPaymentIntent(customerId, amount, currency = 'eur') {
         try {
-            return await stripe.paymentIntents.create({
+            return await getStripe().paymentIntents.create({
                 customer: customerId,
                 amount: amount * 100, // Convert to cents
                 currency: currency,
@@ -97,7 +108,7 @@ class StripeService {
 
     async createCheckoutSession(customerId, priceId, successUrl, cancelUrl) {
         try {
-            return await stripe.checkout.sessions.create({
+            return await getStripe().checkout.sessions.create({
                 customer: customerId,
                 payment_method_types: ['card'],
                 line_items: [
