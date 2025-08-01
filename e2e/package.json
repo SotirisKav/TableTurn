@@ -1,0 +1,40 @@
+{
+  "name": "tableturn-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for TableTurn restaurant reservation system",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:chromium": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:mobile": "playwright test --project='Mobile Chrome' --project='Mobile Safari'",
+    "test:ci": "playwright test --reporter=github",
+    "test:reservation": "playwright test tests/reservation-flow.spec.js",
+    "test:auth": "playwright test tests/authentication.spec.js",
+    "test:browse": "playwright test tests/restaurant-browsing.spec.js",
+    "test:chat": "playwright test tests/chat-functionality.spec.js",
+    "test:ux": "playwright test tests/overall-user-experience.spec.js",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install"
+  },
+  "keywords": [
+    "e2e",
+    "testing", 
+    "playwright",
+    "restaurant",
+    "reservation",
+    "tableturn"
+  ],
+  "author": "TableTurn Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

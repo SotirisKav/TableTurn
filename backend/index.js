@@ -67,9 +67,7 @@ app.use(express.static(frontendPath));
 // Serve other static files from the public directory
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
-// Set the view engine to EJS (for legacy routes if needed)
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, '../views'));
+// Views not needed for API-only backend serving React SPA
 
 // API Routes
 app.get('/api/health', (req, res) => {
@@ -82,38 +80,17 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/restaurants', async (req, res) => {
   try {
-    console.log('Fetching restaurants...');
     const restaurantsData = await RestaurantService.getAllRestaurants();
-    
-    // Enhanced debugging for production environment
-    console.log('Raw restaurantsData type:', typeof restaurantsData);
-    console.log('Raw restaurantsData isArray:', Array.isArray(restaurantsData));
-    console.log('Raw restaurantsData keys:', restaurantsData ? Object.keys(restaurantsData) : 'null/undefined');
-    console.log('Raw restaurantsData sample:', JSON.stringify(restaurantsData).substring(0, 200));
-
-    // --- START OF CRITICAL FIX ---
-
-    // 1. Normalize the data: Check if the returned data is an object that contains a 'rows' property.
-    // This handles the case where the pg library returns a full result object in production.
     const restaurants = Array.isArray(restaurantsData) ? restaurantsData : (restaurantsData.rows || []);
-
-    // 2. Add a final safety check: Ensure we are always sending an array to the frontend.
-    // If, for any reason, 'restaurants' is still not an array, send an empty array to prevent a frontend crash.
+    
     if (!Array.isArray(restaurants)) {
-        console.error("CRITICAL ERROR: The data returned from getAllRestaurants could not be resolved to an array. Data received:", restaurantsData);
-        return res.json([]); // Gracefully send an empty array
+      console.error("Failed to get restaurants array from service");
+      return res.json([]);
     }
-
-    // --- END OF CRITICAL FIX ---
-
-    console.log('Normalized restaurants array length:', restaurants.length);
-    console.log('First restaurant sample:', restaurants[0] ? JSON.stringify(restaurants[0]) : 'No restaurants found');
+    
     res.json(restaurants);
   } catch (error) {
-    console.error('Error fetching restaurants - Full error object:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
+    console.error('Error fetching restaurants:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch restaurants',
       details: error.message 
@@ -146,10 +123,7 @@ app.use('/api/workflow', multiAgentWorkflowRouter);
 // Dashboard Route
 app.use('/api/dashboard', dashboardRouter);
 
-// Legacy EJS route (for backward compatibility)
-app.get('/legacy', (req, res) => {
-  res.render('index'); // Render 'views/index.ejs'
-});
+// Legacy route removed - React SPA handles all UI
 
 // Catch-all handler: send back React's index.html for all non-API routes
 app.get('*', (req, res) => {

@@ -36,12 +36,109 @@ router.get('/:restaurantId/info', async (req, res) => {
     }
 });
 
+// Public route for table types (for reservation form)
+router.get('/:restaurantId/table-types', async (req, res) => {
+    try {
+        const restaurantId = parseInt(req.params.restaurantId);
+
+        const result = await db.query(`
+            SELECT DISTINCT 
+                table_type,
+                table_price
+            FROM tables
+            WHERE restaurant_id = $1
+            ORDER BY table_price ASC, table_type ASC
+        `, [restaurantId]);
+
+        const tableTypes = Array.isArray(result) ? result : (result.rows || []);
+        res.json(tableTypes);
+
+    } catch (error) {
+        console.error('Get table types error:', error);
+        res.status(500).json({ error: 'Failed to fetch table types' });
+    }
+});
+
+// Public route for table capacities (for smart validation)
+router.get('/:restaurantId/table-capacities', async (req, res) => {
+    try {
+        const restaurantId = parseInt(req.params.restaurantId);
+
+        const result = await db.query(`
+            SELECT 
+                table_type,
+                MAX(capacity) as max_capacity
+            FROM tables
+            WHERE restaurant_id = $1
+            GROUP BY table_type
+            ORDER BY table_type ASC
+        `, [restaurantId]);
+
+        const capacities = Array.isArray(result) ? result : (result.rows || []);
+        res.json(capacities);
+
+    } catch (error) {
+        console.error('Get table capacities error:', error);
+        res.status(500).json({ error: 'Failed to fetch table capacities' });
+    }
+});
+
+// Public route for opening hours (for time slot generation)
+router.get('/:restaurantId/opening-hours', async (req, res) => {
+    try {
+        const restaurantId = parseInt(req.params.restaurantId);
+
+        const result = await db.query(`
+            SELECT 
+                day_of_week,
+                open_time,
+                close_time,
+                is_closed
+            FROM opening_hours
+            WHERE restaurant_id = $1
+            ORDER BY day_of_week ASC
+        `, [restaurantId]);
+
+        const hours = Array.isArray(result) ? result : (result.rows || []);
+        
+        // If no opening hours found, return default hours
+        if (hours.length === 0) {
+            const defaultHours = [];
+            for (let day = 0; day < 7; day++) {
+                defaultHours.push({
+                    day_of_week: day,
+                    open_time: '18:00:00',
+                    close_time: '23:30:00',
+                    is_closed: false
+                });
+            }
+            return res.json(defaultHours);
+        }
+        
+        res.json(hours);
+
+    } catch (error) {
+        console.error('Get opening hours error:', error);
+        // Return default hours on error
+        const defaultHours = [];
+        for (let day = 0; day < 7; day++) {
+            defaultHours.push({
+                day_of_week: day,
+                open_time: '18:00:00',
+                close_time: '23:30:00',
+                is_closed: false
+            });
+        }
+        res.json(defaultHours);
+    }
+});
+
 // Public route for basic restaurant info (for dashboard)
 router.get('/:restaurantId', async (req, res) => {
     try {
         const restaurantId = parseInt(req.params.restaurantId);
 
-        const [restaurants] = await db.execute(`
+        const result = await db.query(`
             SELECT 
                 restaurant_id,
                 name,
@@ -56,6 +153,8 @@ router.get('/:restaurantId', async (req, res) => {
             WHERE restaurant_id = $1
         `, [restaurantId]);
 
+        const restaurants = Array.isArray(result) ? result : (result.rows || []);
+        
         if (restaurants.length === 0) {
             return res.status(404).json({ error: 'Restaurant not found' });
         }

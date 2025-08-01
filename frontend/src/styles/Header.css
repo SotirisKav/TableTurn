@@ -31,17 +31,28 @@
   display: flex;
   list-style: none;
   gap: 2rem;
+  align-items: center;
+  margin: 0;
+  padding: 0;
 }
 
-.nav-links a {
+.nav-links a,
+.nav-logout-btn {
   color: var(--text-dark);
   text-decoration: none;
   font-weight: 700;
   transition: var(--transition);
   position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
 }
 
-.nav-links a::after {
+.nav-links a::after,
+.nav-logout-btn::after {
   content: '';
   position: absolute;
   bottom: -5px;
@@ -52,12 +63,33 @@
   transition: var(--transition);
 }
 
-.nav-links a:hover::after {
+.nav-links a:hover::after,
+.nav-logout-btn:hover::after {
   width: 100%;
 }
 
-.nav-links a:hover {
+.nav-links a:hover,
+.nav-logout-btn:hover {
   color: var(--aegean-blue);
+}
+
+/* Special styling for admin dashboard button */
+.admin-nav {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.admin-nav::after {
+  display: none;
+}
+
+.admin-nav:hover {
+  color: white !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
 }
 
 .mobile-menu-toggle {

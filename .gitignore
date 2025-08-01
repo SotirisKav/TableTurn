@@ -82,6 +82,7 @@ aichmi-deploy.zip
 
 # Development and test files
 test_new_architecture.js
+**/packages/
 **/packages/node_modules/
 
 # Database files (if using SQLite locally)
