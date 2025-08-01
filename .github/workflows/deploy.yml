@@ -85,7 +85,14 @@ jobs:
         env:
           NODE_ENV: test
           PORT: 3000
-          # Add your test database connection variables here if needed
+          # Database connection for tests
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: tableturn_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          # JWT for tests
+          JWT_SECRET: test-jwt-secret-key-for-github-actions
 
       # Step 9: Run End-to-End Tests
       - name: Run E2E Tests

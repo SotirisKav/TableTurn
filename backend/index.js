@@ -15,7 +15,7 @@ import multiAgentWorkflowRouter from './routes/multiAgentWorkflow.js';
 import dashboardRouter from './routes/dashboard.js';
 import restaurantRouter from './routes/restaurants.js';
 
-dotenv.config();
+dotenv.config({ path: './.env' });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
