@@ -80,7 +80,7 @@ jobs:
           npm install
           npm start &
           sleep 15  # Wait for server to start
-          curl -f http://localhost:3000 || exit 1  # Verify server is running
+          curl -f http://localhost:3000/api/health || exit 1  # Verify server is running
         working-directory: ./backend
         env:
           NODE_ENV: test
