@@ -67,12 +67,12 @@ jobs:
       # Step 6: Install E2E Test Dependencies
       - name: Install E2E Test Dependencies
         run: npm install
-        working-directory: ./e2e
+        working-directory: ./tests
 
       # Step 7: Install Playwright Browsers
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
-        working-directory: ./e2e
+        working-directory: ./tests
 
       # Step 8: Start Backend for E2E Testing
       - name: Start Backend Server
@@ -90,7 +90,7 @@ jobs:
       # Step 9: Run End-to-End Tests
       - name: Run E2E Tests
         run: npm run test:ci
-        working-directory: ./e2e
+        working-directory: ./tests
         env:
           BASE_URL: http://localhost:3000
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL || 'test@restaurant.com' }}
@@ -106,9 +106,9 @@ jobs:
         with:
           name: e2e-test-results-${{ github.run_number }}
           path: |
-            e2e/test-results/
-            e2e/playwright-report/
-            e2e/screenshots/
+            tests/test-results/
+            tests/playwright-report/
+            tests/screenshots/
           retention-days: 7
 
       # Step 11: Upload E2E Videos on Failure
@@ -117,7 +117,7 @@ jobs:
         if: failure()
         with:
           name: e2e-videos-${{ github.run_number }}
-          path: e2e/test-results/
+          path: tests/test-results/
           retention-days: 7
 
       # Step 12: Build the Frontend
