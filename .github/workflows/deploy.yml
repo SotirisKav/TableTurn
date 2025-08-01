@@ -1,6 +1,6 @@
 # .github/workflows/deploy.yml
 
-name: AICHMI CI/CD Pipeline for Azure
+name: TableTurn CI/CD Pipeline for Azure
 
 # -----------------------------------------------------------------------------
 #  TRIGGERS: When does this pipeline run?
@@ -46,33 +46,33 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm' # Cache npm packages for faster builds
           cache-dependency-path: |
-            aichmi_frontend/package-lock.json
-            aichmi_backend/package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
 
       # Step 3: Install Frontend Dependencies
       - name: Install Frontend Dependencies
         run: npm install
-        working-directory: ./aichmi_frontend
+        working-directory: ./frontend
 
       # Step 4: Install Backend Dependencies (including devDependencies for testing)
       - name: Install Backend Dependencies
         run: npm install
-        working-directory: ./aichmi_backend
+        working-directory: ./backend
 
       # Step 5: Run Linter (Optional but recommended)
       # - name: Run Linter
       #   run: npm run lint
-      #   working-directory: ./aichmi_backend # Or wherever your lint script is
+      #   working-directory: ./backend # Or wherever your lint script is
 
       # Step 6: Run Automated Tests (Crucial for CI)
       # - name: Run Tests
       #   run: npm test
-      #   working-directory: ./aichmi_backend
+      #   working-directory: ./backend
 
       # Step 7: Build the Frontend
       - name: Build Frontend
         run: npm run build
-        working-directory: ./aichmi_frontend
+        working-directory: ./frontend
 
   # ===========================================================================
   #  CD JOB: Deploy to Azure
@@ -102,15 +102,15 @@ jobs:
           node-version: 18.x
           cache: 'npm'
           cache-dependency-path: |
-            aichmi_frontend/package-lock.json
-            aichmi_backend/package-lock.json
+            frontend/package-lock.json
+            backend/package-lock.json
 
       # Step 3: Build the Frontend
       - name: Install and Build Frontend
         run: |
           npm install
           npm run build
-        working-directory: ./aichmi_frontend
+        working-directory: ./frontend
 
       # Step 4: Prepare the Backend for Deployment
       - name: Prepare Backend
@@ -118,16 +118,16 @@ jobs:
           # Create the public directory to hold the frontend build
           mkdir -p public
           # Copy the built frontend into the backend's public folder
-          cp -r ../aichmi_frontend/dist/* ./public/
+          cp -r ../frontend/dist/* ./public/
           # Install ONLY production dependencies for the backend
           npm install --only=production
-        working-directory: ./aichmi_backend
+        working-directory: ./backend
 
       # Step 5: Deploy to Azure App Service
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'aichmi-app' # The name of your Azure App Service
+          app-name: 'tableturn-app' # New TableTurn app name
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ./aichmi_backend # Deploy the entire backend folder
+          package: ./backend # Deploy the entire backend folder

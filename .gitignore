@@ -68,6 +68,7 @@ pids
 
 # Local development tools
 .serena/
+.claude/
 CLAUDE.md
 
 # Infrastructure and deployment files

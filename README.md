@@ -13,7 +13,7 @@
 
 *Intelligent conversation-driven booking platform designed for Greek restaurants*
 
-[Live Demo](https://aichmi-app.azurewebsites.net) • [Documentation](#documentation) • [API Reference](#api-reference) • [Quick Start](#quick-start)
+[Live Demo](https://tableturn-app.azurewebsites.net) • [Documentation](#documentation) • [API Reference](#api-reference) • [Quick Start](#quick-start)
 
 </div>
 
