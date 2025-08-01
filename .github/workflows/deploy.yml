@@ -80,11 +80,11 @@ jobs:
           npm install
           npm start &
           sleep 15  # Wait for server to start
-          curl -f http://localhost:3000/api/health || exit 1  # Verify server is running
+          curl -f http://localhost:8080/api/health || exit 1  # Verify server is running
         working-directory: ./backend
         env:
           NODE_ENV: test
-          PORT: 3000
+          PORT: 8080
           # Database connection for tests
           DB_HOST: localhost
           DB_PORT: 5432
@@ -101,7 +101,7 @@ jobs:
         run: npm run test:ci
         working-directory: ./tests
         env:
-          BASE_URL: http://localhost:3000
+          BASE_URL: http://localhost:8080
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL || 'test@restaurant.com' }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD || 'testpassword' }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || 'admin@tableturn.com' }}
