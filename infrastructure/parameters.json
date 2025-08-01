@@ -15,10 +15,10 @@
       "value": "tableturn_admin"
     },
     "postgresAdminPassword": {
-      "value": "REPLACE_WITH_SECURE_PASSWORD"
+      "value": "steph4sot"
     },
     "myIpAddress": {
-      "value": "REPLACE_WITH_YOUR_IP"
+      "value": "145.224.119.49"
     }
   }
 }

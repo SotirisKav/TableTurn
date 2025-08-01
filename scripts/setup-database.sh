@@ -85,6 +85,27 @@ else
     echo -e "${RED}❌ pgvector extension is not enabled${NC}"
 fi
 
+# Generate embeddings if menu data exists
+echo -e "${BLUE}🧠 Generating embeddings for AI functionality...${NC}"
+MENU_COUNT=$(psql "$CONNECTION_STRING" -t -c "SELECT COUNT(*) FROM menu_item;" | tr -d ' ')
+if [ "$MENU_COUNT" -gt 0 ]; then
+    echo "Found $MENU_COUNT menu items. Generating embeddings..."
+    
+    # Set environment variables for the embedding script
+    export DATABASE_URL="$CONNECTION_STRING"
+    
+    # Change to backend directory and run embeddings
+    cd "$PROJECT_ROOT/backend"
+    if node generate-embeddings.js; then
+        echo -e "${GREEN}✅ Embeddings generated successfully!${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Embedding generation failed. You can run it manually later with: node generate-embeddings.js${NC}"
+    fi
+    cd "$SCRIPT_DIR"
+else
+    echo -e "${YELLOW}⚠️  No menu items found. Skipping embedding generation.${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}🎉 Database setup completed successfully!${NC}"
 echo ""
