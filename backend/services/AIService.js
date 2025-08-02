@@ -418,8 +418,11 @@ export async function generateSpokenResponse(userMessage, toolResult, toolName, 
       if (restaurant) restaurantName = restaurant.name;
     }
     
-    // Build the response generation prompt
-    const responsePrompt = buildResponsePrompt(userMessage, toolResult, toolName, restaurantName);
+    // Extract conversation history from toolResult if available
+    const conversationHistory = toolResult?.conversationHistory || [];
+    
+    // Build the response generation prompt with conversation context
+    const responsePrompt = buildResponsePrompt(userMessage, toolResult, toolName, restaurantName, conversationHistory);
     
     // Call Gemini with the response prompt
     const response = await fetch(
@@ -578,7 +581,16 @@ Do NOT include any explanatory text before or after the JSON. Only return the JS
 /**
  * Build the response generation prompt
  */
-function buildResponsePrompt(userMessage, toolResult, toolName, restaurantName) {
+function buildResponsePrompt(userMessage, toolResult, toolName, restaurantName, conversationHistory = []) {
+  // Build conversation context for reference resolution
+  let conversationContext = '';
+  if (conversationHistory && conversationHistory.length > 0) {
+    const recentHistory = conversationHistory.slice(-4).map(msg => 
+      `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
+    ).join('\n');
+    conversationContext = `\n\n--- CONVERSATION HISTORY (for reference resolution) ---\n${recentHistory}\n--- END OF CONVERSATION HISTORY ---\n`;
+  }
+  
   // Special handling for master narrator consolidation - use the stricter approach
   if (toolName === 'master_narrator_consolidation') {
     return `You are a helpful AI assistant. Your ONLY job is to translate the provided "Tool Result" into a natural, human-readable response.
@@ -587,41 +599,47 @@ function buildResponsePrompt(userMessage, toolResult, toolName, restaurantName) 
 
 **CRITICAL RULE: Your primary goal is to directly answer the user's original question using the factual data provided in the 'Tool Result'. If the user asks a specific yes/no question (e.g., 'Are the lamb chops gluten-free?'), and the tool result provides the necessary information to answer it, you must answer with a direct 'Yes' or 'No' before providing any additional, related information. For example, if the tool result shows the lamb chops are not gluten-free, the correct response is: 'No, our lamb chops are not gluten-free. However, if you are looking for a gluten-free option, I can recommend...'.**
 
-User's Original Question: "${userMessage}"
+**REFERENCE RESOLUTION: When the user uses phrases like "these 5", "the ones above", "those items", "the cheapest/healthiest of these", you MUST refer to the conversation history to understand what they are referring to. Use the conversation context to resolve these references correctly.**
+
+User's Original Question: "${userMessage}"${conversationContext}
 
 --- TOOL RESULT (The Ground Truth) ---
 ${JSON.stringify(toolResult, null, 2)}
 --- END OF TOOL RESULT ---
 
-Now, based ONLY on the Tool Result, formulate the final response to the user.
+Now, based ONLY on the Tool Result and using the conversation history for reference resolution, formulate the final response to the user.
 
 Examples:
 - If the Tool Result contains { success: true, message: 'I am sorry, I cannot provide owner information.' }, your response MUST be: "I am sorry, I cannot provide owner information."
 - If the Tool Result is { success: true, available: true, availableTableTypes: [...] }, your response should be: "Great news! We have tables available..."
 - If the Tool Result is { success: false, error: '...' }, your response MUST be: "I'm sorry, an error occurred while processing your request."
+- If the user asks "out of these 5, which is the healthiest" and the conversation history shows 6 menu items were previously listed, identify which are the 5 items being referenced and answer accordingly.
 
 CRITICAL: If the tool result says it cannot provide information or gives an error message, you MUST convey that exact limitation. Do not invent or supplement information.`;
   }
 
-  // For regular tools, also use the stricter approach
+  // For regular tools, also use the stricter approach with conversation context
   return `You are a helpful AI assistant. Your ONLY job is to translate the provided "Tool Result" into a natural, human-readable response.
 
 **CRITICAL RULE: You MUST base your response exclusively on the information within the "Tool Result" section. Do not use any prior knowledge. Do not answer the user's original question if the tool result indicates it cannot be answered.**
 
 **CRITICAL RULE: Your primary goal is to directly answer the user's original question using the factual data provided in the 'Tool Result'. If the user asks a specific yes/no question (e.g., 'Are the lamb chops gluten-free?'), and the tool result provides the necessary information to answer it, you must answer with a direct 'Yes' or 'No' before providing any additional, related information. For example, if the tool result shows the lamb chops are not gluten-free, the correct response is: 'No, our lamb chops are not gluten-free. However, if you are looking for a gluten-free option, I can recommend...'.**
 
-User's Original Question: "${userMessage}"
+**REFERENCE RESOLUTION: When the user uses phrases like "these 5", "the ones above", "those items", "the cheapest/healthiest of these", you MUST refer to the conversation history to understand what they are referring to. Use the conversation context to resolve these references correctly.**
+
+User's Original Question: "${userMessage}"${conversationContext}
 
 --- TOOL RESULT (The Ground Truth) ---
 ${JSON.stringify(toolResult, null, 2)}
 --- END OF TOOL RESULT ---
 
-Now, based ONLY on the Tool Result, formulate the final response to the user.
+Now, based ONLY on the Tool Result and using the conversation history for reference resolution, formulate the final response to the user.
 
 Examples:
 - If the Tool Result contains { success: true, message: 'I am sorry, I cannot provide owner information.' }, your response MUST be: "I am sorry, I cannot provide owner information."
 - If the Tool Result is { success: true, available: true, availableTableTypes: [...] }, your response should be: "Great news! We have tables available..."
 - If the Tool Result is { success: false, error: '...' }, your response MUST be: "I'm sorry, an error occurred while processing your request."
+- If the user asks "out of these 5, which is the healthiest" and the conversation history shows 6 menu items were previously listed, identify which are the 5 items being referenced and answer accordingly.
 
 CRITICAL: If the tool result says it cannot provide information or gives an error message, you MUST convey that exact limitation. Do not invent or supplement information.`;
 }
