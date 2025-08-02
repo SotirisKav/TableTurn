@@ -26,7 +26,7 @@ test.describe('Complete User Experience', () => {
     const firstCard = restaurantCards.first();
     const restaurantName = await firstCard.locator('h2, h3, .restaurant-name').first().textContent();
     
-    const reservationButton = firstCard.locator('text=Make Reservation, text=Book Now, .reserve-btn').first();
+    const reservationButton = firstCard.locator('text="Make Reservation"').or(firstCard.locator('text="Book Now"')).or(firstCard.locator('.reserve-btn')).first();
     await reservationButton.click();
     
     // Step 4: Verify reservation page layout

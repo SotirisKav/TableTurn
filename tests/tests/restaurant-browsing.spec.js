@@ -47,7 +47,7 @@ test.describe('Restaurant Browsing', () => {
     await expect(firstCard.locator('.location, .address, .area')).toBeVisible();
     
     // Should have a reservation button
-    const reservationButton = firstCard.locator('text=Make Reservation, text=Book Now, .reserve-btn, .cta-button');
+    const reservationButton = firstCard.locator('text="Make Reservation"').or(firstCard.locator('text="Book Now"')).or(firstCard.locator('.reserve-btn')).or(firstCard.locator('.cta-button'));
     await expect(reservationButton).toBeVisible();
   });
 
