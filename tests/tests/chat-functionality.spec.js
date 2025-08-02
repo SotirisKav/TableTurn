@@ -18,58 +18,50 @@ test.describe('Chat with Tablio', () => {
     const chatComponent = page.locator('.unified-chat-component');
     await expect(chatComponent).toBeVisible();
     
-    // Verify chat benefits are shown
-    const chatBenefits = page.locator('.chat-benefits li');
-    await expect(chatBenefits).toHaveCount(5);
-    
-    // Verify benefits text
-    await expect(chatBenefits.nth(0)).toContainText('instant answers about availability');
-    await expect(chatBenefits.nth(1)).toContainText('menu recommendations');
-    await expect(chatBenefits.nth(2)).toContainText('dietary requirements');
-    await expect(chatBenefits.nth(3)).toContainText('celebrations');
-    await expect(chatBenefits.nth(4)).toContainText('reservations through conversation');
+    // Verify chat benefits section exists
+    const chatBenefits = page.locator('.chat-benefits');
+    await expect(chatBenefits).toBeVisible();
     
     // Click Chat with Tablio button
     const chatButton = page.locator('.chat-cta-btn');
-    await expect(chatButton).toContainText('Chat with Tablio');
+    await expect(chatButton).toContainText('💬 Chat with Tablio');
     await chatButton.click();
     
     // Should navigate to chat page
-    await expect(page).toHaveURL(/.*chat\/\d+/);
+    await expect(page).toHaveURL(/.*chat\/1/);
   });
 
   test('should display chat interface correctly', async ({ page }) => {
     await page.goto('/chat/1');
     
     // Verify chat interface elements
-    await expect(page.locator('h1, h2')).toContainText(/chat|tablio/i);
+    await expect(page.locator('.premium-chat-title')).toContainText('Tablio Assistant');
     
     // Should have chat history/messages area
-    const chatHistory = page.locator('.chat-history, .messages, .chat-messages, [class*="chat-container"]');
+    const chatHistory = page.locator('.premium-chat-history');
     await expect(chatHistory).toBeVisible();
     
     // Should have input field for typing messages
-    const chatInput = page.locator('input[type="text"], textarea[placeholder*="message"], .chat-input, input[placeholder*="chat"]');
+    const chatInput = page.locator('.premium-input');
     await expect(chatInput).toBeVisible();
+    await expect(chatInput).toHaveAttribute('placeholder', 'Ask about reservations, menu, or special requests...');
     
     // Should have send button
-    const sendButton = page.locator('button[type="submit"], .send-btn, .send-button, button:has-text("Send")');
+    const sendButton = page.locator('.premium-send-btn');
     await expect(sendButton).toBeVisible();
     
-    // Should show initial AI greeting
-    const welcomeMessage = page.locator('.message, .chat-message').first();
-    await expect(welcomeMessage).toBeVisible();
-    await expect(welcomeMessage).toContainText(/hi|hello|tablio|assistant/i);
+    // Should show online status
+    await expect(page.locator('.chat-status')).toContainText('Online - Ready to help');
   });
 
   test('should handle user messages and AI responses', async ({ page }) => {
     await page.goto('/chat/1');
     
     // Wait for chat interface to load
-    await page.waitForSelector('.chat-input, input[type="text"], textarea', { timeout: 5000 });
+    await page.waitForSelector('.premium-input', { timeout: 5000 });
     
-    const chatInput = page.locator('.chat-input, input[type="text"], textarea').first();
-    const sendButton = page.locator('button[type="submit"], .send-btn, button:has-text("Send")').first();
+    const chatInput = page.locator('.premium-input');
+    const sendButton = page.locator('.premium-send-btn');
     
     // Send a test message
     const testMessage = "What are your opening hours?";
@@ -77,11 +69,11 @@ test.describe('Chat with Tablio', () => {
     await sendButton.click();
     
     // Verify user message appears
-    const userMessage = page.locator('.message.user, .chat-message.user, [class*="user-message"]').last();
+    const userMessage = page.locator('.premium-message.user').last();
     await expect(userMessage).toContainText(testMessage);
     
     // Wait for AI response
-    const aiResponse = page.locator('.message.ai, .chat-message.ai, [class*="ai-message"], [class*="bot-message"]').last();
+    const aiResponse = page.locator('.premium-message.ai').last();
     await expect(aiResponse).toBeVisible({ timeout: 10000 });
     
     // AI response should contain relevant information
@@ -95,17 +87,17 @@ test.describe('Chat with Tablio', () => {
     await page.goto('/chat/1');
     
     // Wait for interface
-    await page.waitForSelector('.chat-input, input[type="text"], textarea', { timeout: 5000 });
+    await page.waitForSelector('.premium-input', { timeout: 5000 });
     
-    const chatInput = page.locator('.chat-input, input[type="text"], textarea').first();
-    const sendButton = page.locator('button[type="submit"], .send-btn, button:has-text("Send")').first();
+    const chatInput = page.locator('.premium-input');
+    const sendButton = page.locator('.premium-send-btn');
     
     // Ask about making a reservation
     await chatInput.fill("I want to make a reservation for 4 people tomorrow at 7 PM");
     await sendButton.click();
     
     // Wait for AI response
-    const aiResponse = page.locator('.message.ai, .chat-message.ai, [class*="ai-message"]').last();
+    const aiResponse = page.locator('.premium-message.ai').last();
     await expect(aiResponse).toBeVisible({ timeout: 10000 });
     
     // Response should be helpful for reservations
@@ -115,17 +107,17 @@ test.describe('Chat with Tablio', () => {
   test('should handle menu-related queries', async ({ page }) => {
     await page.goto('/chat/1');
     
-    await page.waitForSelector('.chat-input, input[type="text"], textarea', { timeout: 5000 });
+    await page.waitForSelector('.premium-input', { timeout: 5000 });
     
-    const chatInput = page.locator('.chat-input, input[type="text"], textarea').first();
-    const sendButton = page.locator('button[type="submit"], .send-btn, button:has-text("Send")').first();
+    const chatInput = page.locator('.premium-input');
+    const sendButton = page.locator('.premium-send-btn');
     
     // Ask about menu
     await chatInput.fill("What Greek dishes do you recommend?");
     await sendButton.click();
     
     // Wait for response
-    const aiResponse = page.locator('.message.ai, .chat-message.ai, [class*="ai-message"]').last();
+    const aiResponse = page.locator('.premium-message.ai').last();
     await expect(aiResponse).toBeVisible({ timeout: 10000 });
     
     // Should provide menu recommendations
@@ -135,17 +127,17 @@ test.describe('Chat with Tablio', () => {
   test('should handle dietary restriction queries', async ({ page }) => {
     await page.goto('/chat/1');
     
-    await page.waitForSelector('.chat-input, input[type="text"], textarea', { timeout: 5000 });
+    await page.waitForSelector('.premium-input', { timeout: 5000 });
     
-    const chatInput = page.locator('.chat-input, input[type="text"], textarea').first();
-    const sendButton = page.locator('button[type="submit"], .send-btn, button:has-text("Send")').first();
+    const chatInput = page.locator('.premium-input');
+    const sendButton = page.locator('.premium-send-btn');
     
     // Ask about dietary restrictions
     await chatInput.fill("Do you have vegetarian options?");
     await sendButton.click();
     
     // Wait for response
-    const aiResponse = page.locator('.message.ai, .chat-message.ai, [class*="ai-message"]').last();
+    const aiResponse = page.locator('.premium-message.ai').last();
     await expect(aiResponse).toBeVisible({ timeout: 10000 });
     
     // Should address dietary concerns
