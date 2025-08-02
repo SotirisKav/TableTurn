@@ -161,7 +161,21 @@ class MenuPricingAgent extends BaseAgent {
      */
     buildFocusedThinkingPrompt(originalMessage, specificTask, history, globalContext) {
         const contextSummary = this.summarizeGlobalContext(globalContext);
-        const recentHistory = history.slice(-3).map(h => `${h.sender}: ${h.text}`).join('\n');
+        const recentHistory = history.slice(-6).map(h => `${h.sender}: ${h.text}`).join('\n');
+        
+        // Check if the task contains conversational references
+        const hasReferences = /\b(these|those|them|it|the ones?|which of (these|those))\b/i.test(specificTask);
+        
+        let referenceInstructions = '';
+        if (hasReferences) {
+            referenceInstructions = `
+CRITICAL REFERENCE RESOLUTION:
+The user is using conversational references like "these 5", "which of these", "the ones above".
+Look at the CONVERSATION HISTORY to understand what items they are referring to.
+If you can identify the items from the conversation history, use get_menu_items to provide the answer.
+Do NOT ask for clarification if the conversation history clearly shows what they're referring to.
+`;
+        }
         
         return `You are a menu specialist agent. Your job is to analyze the user's request and choose the best tool from your limited tool belt.
 
@@ -174,16 +188,17 @@ YOUR SPECIFIC TASK: "${specificTask}"
 
 YOUR ALLOWED TOOLS: ${JSON.stringify(this.allowedTools)}
 
-RECENT CONVERSATION HISTORY:
+CONVERSATION HISTORY (Use this to resolve references like "these", "those", "the ones"):
 ${recentHistory || 'None'}
-
+${referenceInstructions}
 INSTRUCTIONS:
 1. Analyze YOUR SPECIFIC TASK in the context of the user's full request and the global context
 2. Choose the single best tool from YOUR ALLOWED TOOLS to accomplish your specific task
 3. Do NOT attempt to handle parts of the query that are outside your scope (like availability or celebrations)
 4. If other agents have already handled related parts, focus on what's missing for menu information
 5. Use get_menu_items for any request involving food, dishes, dietary requirements, or menu pricing
-6. Use clarify_and_respond only if you need more information for menu searching
+6. IMPORTANT: If the user asks about "these 5", "which of these", etc., and the conversation history shows menu items were previously listed, use get_menu_items with an appropriate query to answer their question
+7. Use clarify_and_respond only if you genuinely need more information AND the conversation history doesn't provide context
 
 Respond ONLY with a JSON object: { "tool_to_call": "...", "parameters": {...} }`;
     }
