@@ -95,8 +95,8 @@ test.describe('Authentication Flow', () => {
 
   test('should show admin dashboard for admin users', async ({ page }) => {
     // This test assumes you have admin test credentials
-    const adminEmail = process.env.TEST_ADMIN_EMAIL || 'admin@tableturn.com';
-    const adminPassword = process.env.TEST_ADMIN_PASSWORD || 'adminpassword';
+    const adminEmail = process.env.TEST_ADMIN_EMAIL || 'sotiriskavadakis@gmail.com';
+    const adminPassword = process.env.TEST_ADMIN_PASSWORD || 'admin123';
     
     await page.goto('/login');
     await page.fill('input[type="email"], input[name="email"]', adminEmail);

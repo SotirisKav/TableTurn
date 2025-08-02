@@ -104,8 +104,8 @@ jobs:
       #     BASE_URL: http://localhost:8080
       #     TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL || 'test@restaurant.com' }}
       #     TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD || 'testpassword' }}
-      #     TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || 'admin@tableturn.com' }}
-      #     TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || 'adminpassword' }}
+      #     TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || 'sotiriskavadakis@gmail.com' }}
+      #     TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || 'admin123' }}
       #     CI: true
 
       # Step 10: Upload E2E Test Results
