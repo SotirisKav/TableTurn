@@ -199,7 +199,7 @@ test.describe('Complete User Experience', () => {
     
     // Should show error page or redirect
     const currentUrl = page.url();
-    const hasErrorIndicator = await page.locator('text=404, text=Not Found, text=Error').isVisible();
+    const hasErrorIndicator = await page.locator('text="404"').or(page.locator('text="Not Found"')).or(page.locator('text="Error"')).isVisible();
     
     // Either should show 404 content or redirect to valid page
     if (currentUrl.includes('nonexistent-page')) {
@@ -213,7 +213,7 @@ test.describe('Complete User Experience', () => {
     await page.goto('/reservation/99999');
     
     // Should handle gracefully - either show error or redirect
-    const reservationError = await page.locator('text=Restaurant not found, text=Error, text=404').isVisible();
+    const reservationError = await page.locator('text="Restaurant not found"').or(page.locator('text="Error"')).or(page.locator('text="404"')).isVisible();
     
     if (reservationError) {
       // Shows proper error message

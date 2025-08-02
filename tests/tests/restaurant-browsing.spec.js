@@ -112,7 +112,7 @@ test.describe('Restaurant Browsing', () => {
       
       if (cardCount > 0) {
         // At least one result should mention Greek
-        const greekText = page.locator('text=Greek, text=greek');
+        const greekText = page.locator('text="Greek"').or(page.locator('text="greek"'));
         await expect(greekText.first()).toBeVisible();
       }
     }
@@ -127,7 +127,7 @@ test.describe('Restaurant Browsing', () => {
     
     // Click the reservation button on first restaurant
     const firstCard = restaurantCards.first();
-    const reservationButton = firstCard.locator('text=Make Reservation, text=Book Now, .reserve-btn, .cta-button').first();
+    const reservationButton = firstCard.locator('text="Make Reservation"').or(firstCard.locator('text="Book Now"')).or(firstCard.locator('.reserve-btn')).or(firstCard.locator('.cta-button')).first();
     
     await reservationButton.click();
     
@@ -149,7 +149,7 @@ test.describe('Restaurant Browsing', () => {
     const restaurantName = await firstCard.locator('h2, h3, .restaurant-name, .name').first().textContent();
     
     // Click to go to reservation page
-    const reservationButton = firstCard.locator('text=Make Reservation, text=Book Now, .reserve-btn, .cta-button').first();
+    const reservationButton = firstCard.locator('text="Make Reservation"').or(firstCard.locator('text="Book Now"')).or(firstCard.locator('.reserve-btn')).or(firstCard.locator('.cta-button')).first();
     await reservationButton.click();
     
     // Verify restaurant name appears on reservation page
@@ -185,7 +185,7 @@ test.describe('Restaurant Browsing', () => {
     }
     
     // Verify reservation button is accessible on mobile
-    const reservationButton = firstCard.locator('text=Make Reservation, text=Book Now, .reserve-btn, .cta-button').first();
+    const reservationButton = firstCard.locator('text="Make Reservation"').or(firstCard.locator('text="Book Now"')).or(firstCard.locator('.reserve-btn')).or(firstCard.locator('.cta-button')).first();
     await expect(reservationButton).toBeVisible();
     
     // Should be able to click and navigate
@@ -214,7 +214,7 @@ test.describe('Restaurant Browsing', () => {
       await page.waitForTimeout(1000);
       
       // Should show "no results" message or empty state
-      const noResultsMessage = page.locator('text=No restaurants found, text=No results, .no-results, .empty-state');
+      const noResultsMessage = page.locator('text="No restaurants found"').or(page.locator('text="No results"')).or(page.locator('.no-results')).or(page.locator('.empty-state'));
       
       // Either show no results message or no restaurant cards
       const hasNoResultsMessage = await noResultsMessage.isVisible();
